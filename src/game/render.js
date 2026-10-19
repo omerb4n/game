@@ -517,7 +517,8 @@ export class Renderer {
       ctx.restore();
     }
     const air = !p.onGround;
-    let sx = 1 + p.sq * 0.6, sy = 1 - p.sq * 0.8;
+    const big = world.mut?.has('bighead') ? 1.4 : 1;
+    let sx = (1 + p.sq * 0.6) * big, sy = (1 - p.sq * 0.8) * big;
     if (air && !p.wallDir) { const v = clamp(p.vy / 600, -0.25, 0.25); sx *= 1 - Math.abs(v) * 0.5; sy *= 1 + Math.abs(v) * 0.6; }
     drawHero(ctx, p.hero.id, x, y, {
       facing: p.facing, t, sx, sy, aimX: p.aimX, aimY: p.aimY, blink: p.blink, hurt: p.hurtT > 0, hat: p.hat,

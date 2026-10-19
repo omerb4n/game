@@ -23,6 +23,13 @@ const MODES = {
   bossrush: { name: 'Boss Rush', icon: '☠', desc: 'All four bosses back to back with perks in between.' },
 };
 const DIFFS = { casual: 'Casual', normal: 'Normal', hard: 'Hard' };
+const MUTATORS = {
+  enraged: { name: 'All Enraged', icon: '😡', desc: 'Every enemy spawns enraged. Score ×1.5' },
+  glass: { name: 'Glass Cannon', icon: '◆', desc: '1 heart each, double damage. Score ×1.5' },
+  lowgrav: { name: 'Low Gravity', icon: '🌙', desc: 'Floaty jumps for everyone' },
+  rush: { name: 'Sugar Party', icon: '🌈', desc: 'Sugar Rush power-ups drop constantly' },
+  bighead: { name: 'Big Bakers', icon: '🎈', desc: 'Everyone is 40% bigger. Just for fun' },
+};
 
 function tilesForLevel(level) {
   const rows = expandMap(level);
@@ -65,7 +72,7 @@ class App {
     this.session = localSession();
     this.localSlots = []; // [{ctl, hero, hat}]
     this.roster = []; // [{id, peer, slot, hero, hat, name, perks}]
-    this.lobby = { mode: 'campaign', diff: settings().difficulty };
+    this.lobby = { mode: 'campaign', diff: settings().difficulty, mutators: [] };
     this.run = null;
     this.acc = 0;
     this.last = performance.now();
@@ -295,6 +302,12 @@ class App {
       case 'addKb': this.addKeyboardPlayer(); break;
       case 'mode': this.lobby.mode = d.mode; this.syncLobby(); this.renderLobby(); break;
       case 'diff': this.lobby.diff = d.diff; settings().difficulty = d.diff; save(); this.syncLobby(); this.renderLobby(); break;
+      case 'mut': {
+        const m = new Set(this.lobby.mutators || []);
+        if (m.has(d.mut)) m.delete(d.mut); else m.add(d.mut);
+        this.lobby.mutators = [...m]; this.syncLobby(); this.renderLobby();
+        break;
+      }
       case 'startLobby': this.lobbyStart(); break;
       case 'copyLink': this.copyLink(); break;
       case 'host': this.hostOnline(); break;
@@ -496,6 +509,7 @@ class App {
           ${online && !isClient ? `<div class="invite"><div id="qr"></div><div class="invite-txt">Friends scan or open:<br><span class="url">${esc(shareUrl)}</span><br>or enter code <b>${esc(this.session.code)}</b></div></div>` : ''}
           <div class="opt"><div class="lbl">Mode</div><div class="chips">${modeBtns}</div><div class="desc">${MODES[this.lobby.mode].desc}${this.lobby.mode === 'endless' && S().endlessBest ? ` <b>Best: stage ${S().endlessBest}</b>` : ''}</div></div>
           <div class="opt"><div class="lbl">Difficulty</div><div class="chips">${diffBtns}</div></div>
+          ${this.lobby.mode !== 'campaign' ? `<div class="opt"><div class="lbl">Mutators</div><div class="chips">${Object.entries(MUTATORS).map(([k, m]) => `<button class="btn chip ${(this.lobby.mutators || []).includes(k) ? 'sel' : ''}" data-nav data-act="mut" data-mut="${k}" title="${esc(m.desc)}" ${isClient ? 'disabled' : ''}>${m.icon} ${m.name}</button>`).join('')}</div>${(this.lobby.mutators || []).length ? `<div class="desc">${this.lobby.mutators.map((k) => esc(MUTATORS[k].desc)).join(' · ')}</div>` : ''}</div>` : ''}
           ${isClient ? '<div class="wait big">Waiting for the host to start…</div>' : `<button class="btn big primary" data-nav data-act="startLobby" ${canStart ? '' : 'disabled'}>Let's Bake! ▶</button>`}
           <div class="ctrl-help">${ctrlHelp}</div>
         </div>
@@ -633,7 +647,7 @@ class App {
   }
   syncLobby() {
     if (this.session.role !== 'host') return;
-    this.session.broadcast({ type: 'lobby', roster: this.roster, mode: this.lobby.mode, diff: this.lobby.diff, code: this.session.code });
+    this.session.broadcast({ type: 'lobby', roster: this.roster, mode: this.lobby.mode, diff: this.lobby.diff, mutators: this.lobby.mutators, code: this.session.code });
   }
   setupHostHandlers() {
     const s = this.session;
@@ -668,7 +682,7 @@ class App {
   setupClientHandlers() {
     const s = this.session;
     s.on('lobby', (m) => {
-      this.roster = m.roster; this.lobby.mode = m.mode; this.lobby.diff = m.diff;
+      this.roster = m.roster; this.lobby.mode = m.mode; this.lobby.diff = m.diff; this.lobby.mutators = m.mutators || [];
       const mine = this.roster.find((r) => r.peer === s.myId);
       if (mine) { this.localSlots[0].hero = mine.hero; }
       if (this.screen === 'lobby' || this.screen === 'online') this.renderLobby();
@@ -770,7 +784,7 @@ class App {
 
   // =============================================================== RUN FLOW (host/local)
   startRun(mode, levelId) {
-    this.run = { mode, stage: 0, levelId: levelId || null, world: levelId ? levelById(levelId).world : 0, diff: this.lobby.diff, totalScore: 0 };
+    this.run = { mode, stage: 0, levelId: levelId || null, world: levelId ? levelById(levelId).world : 0, diff: this.lobby.diff, totalScore: 0, mutators: mode === 'campaign' ? [] : [...(this.lobby.mutators || [])] };
     for (const r of this.roster) r.perks = [];
     this.startStage();
   }
@@ -798,7 +812,7 @@ class App {
     const localCtl = {};
     this.localSlots.forEach((s, i) => { localCtl[i] = s.ctl; s.ctl.clearEdges(); });
     this.world = new World({
-      level, roster: this.roster, session: this.session, localCtl, difficulty: diff, endSample,
+      level, roster: this.roster, session: this.session, localCtl, difficulty: diff, endSample, mutators: this.run?.mutators || [],
       hooks: {
         banner: (t, s) => { this.renderer.banner(t, s); sfx('banner'); },
         comboBanner: (n) => { this.renderer.banner(`${n}x COMBO!`, n >= 30 ? 'SUGAR OVERLOAD!' : n >= 20 ? 'SWEET!' : 'Keep it rolling!'); },

@@ -37,6 +37,7 @@ export class Player {
     this.wallDir = 0;
     const diff = world.diffName;
     this.maxHp = Math.max(1, this.hero.hp + this.mods.maxHp + (diff === 'casual' ? 1 : 0));
+    if (world.mut?.has('glass')) { this.maxHp = 1; this.mods.dmg *= 2; }
     this.hp = this.maxHp;
     this.invuln = 0; this.down = false; this.reviveProg = 0; this.autoRevive = 0;
     this.secondBakeUsed = 0;
@@ -181,7 +182,7 @@ export class Player {
 
     // gravity with apex hang + fast fall
     if (this.dashT <= 0) {
-      let g = this.vy < 0 && c.jump ? GRAV_UP : GRAV_DOWN;
+      let g = (this.vy < 0 && c.jump ? GRAV_UP : GRAV_DOWN) * w.gravMul;
       if (Math.abs(this.vy) < 45 && c.jump) g *= 0.55;
       let maxFall = MAX_FALL;
       if (c.y > 0.5 && !this.onGround) { maxFall = FAST_FALL; g *= 1.15; }

@@ -30,6 +30,9 @@ export class World {
     this.diffName = cfg.difficulty || settings().difficulty;
     this.diff = DIFF[this.diffName] || DIFF.normal;
     this.fx = new FX();
+    this.mut = new Set(cfg.mutators || []);
+    this.gravMul = this.mut.has('lowgrav') ? 0.55 : 1;
+    this.scoreMul = (this.mut.has('enraged') ? 1.5 : 1) * (this.mut.has('glass') ? 1.5 : 1);
     this.time = 0;
     this.step = 0;
     this.hitstop = 0;
@@ -412,6 +415,7 @@ export class World {
 
   spawnEnemyAt(type, x, y, o = {}) {
     const def = enemyDef(type);
+    if (this.mut.has('enraged') && !def.boss) o = { ...o, enraged: true };
     const hpMul = (def.boss ? this.bossHpScale : this.hpScale) * (o.enraged ? 1.3 : 1);
     const hp = Math.round(def.hp * hpMul);
     const e = {
@@ -449,7 +453,7 @@ export class World {
       const disabled = e.frozen > 0 || e.stun > 0 || e.kbT > 0;
       if (!disabled) def.ai(e, this, dt);
       else { e.vx *= def.flying ? 0.9 : 0.94; if (def.flying && e.frozen <= 0) e.vy *= 0.9; }
-      if (!def.flying || e.frozen > 0) e.vy = Math.min(e.vy + 900 * dt, 420);
+      if (!def.flying || e.frozen > 0) e.vy = Math.min(e.vy + 900 * this.gravMul * dt, 420);
       if (def.noclip && e.frozen <= 0) { e.x += e.vx * dt; e.y += e.vy * dt; e.onGround = false; e.hitWall = 0; }
       else this.moveEntity(e, dt);
       if (!def.boss || def.noclip) this.wrapEntity(e);
@@ -476,7 +480,7 @@ export class World {
       const k = this.pickups[i];
       k.t += dt;
       if (!k.float) {
-        k.vy = Math.min(k.vy + 600 * dt, 350);
+        k.vy = Math.min(k.vy + 600 * this.gravMul * dt, 350);
         this.moveEntity(k, dt);
         if (k.onGround) k.vx *= 0.85;
         this.wrapEntity(k);
@@ -574,7 +578,7 @@ export class World {
     }
   }
 
-  addScore(n) { this.score += Math.round(n * this.comboMult()); }
+  addScore(n) { this.score += Math.round(n * this.comboMult() * this.scoreMul); }
   comboMult() { return 1 + Math.min(3, Math.floor(this.combo / 5) * 0.25); }
 
   // ================================================================= DAMAGE: players -> enemies
@@ -675,7 +679,7 @@ export class World {
     } else if (chance(0.35)) this.spawnPickup('muffin', cx, cy, rand(-60, 60), rand(-220, -140));
     const lowHp = this.players.some((p) => !p.down && p.hp <= 1);
     if (chance(lowHp ? 0.12 : 0.045)) this.spawnPickup('heart', cx, cy, rand(-50, 50), -220);
-    if (chance(0.025) || (this.combo > 0 && this.combo % 25 === 0)) { const rk = this.spawnPickup('rush', cx, cy, rand(-40, 40), -260); rk.life = 9; }
+    if (chance(this.mut.has('rush') ? 0.14 : 0.025) || (this.combo > 0 && this.combo % 25 === 0)) { const rk = this.spawnPickup('rush', cx, cy, rand(-40, 40), -260); rk.life = 9; }
     const coins = chance(0.4) ? (e.enraged ? randi(2, 3) : 1) : 0;
     for (let i = 0; i < coins; i++) this.spawnPickup('coin', cx, cy, rand(-90, 90), rand(-260, -160));
   }
