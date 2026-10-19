@@ -299,6 +299,12 @@ class App {
       case 'hero': this.cycleHero(+d.slot, +d.dir); break;
       case 'hat': this.cycleHat(+d.slot, +d.dir); break;
       case 'removeSlot': this.removeLocalSlot(+d.slot); break;
+      case 'kick':
+        if (this.session.role === 'host') {
+          this.session.sendTo(d.peer, { type: 'kicked' });
+          setTimeout(() => this.session._dropPeer(d.peer), 150);
+        }
+        break;
       case 'addKb': this.addKeyboardPlayer(); break;
       case 'mode': this.lobby.mode = d.mode; this.syncLobby(); this.renderLobby(); break;
       case 'diff': this.lobby.diff = d.diff; settings().difficulty = d.diff; save(); this.syncLobby(); this.renderLobby(); break;
@@ -471,7 +477,8 @@ class App {
         cards.push(`
           <div class="pcard" style="--pc:${PLAYER_COLORS[i]}">
             <div class="pc-top"><span class="pc-tag">${esc(r.name)}</span><span class="pc-dev">${esc(dev)}</span>
-              ${mine && mineIdx > 0 ? `<button class="x" data-nav data-act="removeSlot" data-slot="${mineIdx}" title="Remove">✕</button>` : ''}</div>
+              ${mine && mineIdx > 0 ? `<button class="x" data-nav data-act="removeSlot" data-slot="${mineIdx}" title="Remove">✕</button>` : ''}
+              ${!mine && this.session.role === 'host' ? `<button class="x" data-nav data-act="kick" data-peer="${esc(r.peer)}" title="Remove from room">✕</button>` : ''}</div>
             <canvas width="120" height="120" data-hero="${h.id}" data-hat="${esc(r.hat || 'none')}"></canvas>
             <div class="pc-name">${esc(h.name)}</div>
             <div class="pc-role">${esc(h.role)} · ${'❤'.repeat(h.hp)}</div>
@@ -687,6 +694,7 @@ class App {
       if (mine) { this.localSlots[0].hero = mine.hero; }
       if (this.screen === 'lobby' || this.screen === 'online') this.renderLobby();
     });
+    s.on('kicked', () => { s.onDisconnect = null; s.close(); this.session = localSession(); this.roster = []; this.goTitle(); this.toast('The host removed you from the room', '👋'); });
     s.on('full', () => { this.netMsg('That room is full (4/4).', true); s.close(); this.session = localSession(); });
     s.on('busy', () => { this.netMsg('That room is mid-game. Ask the host to return to the lobby.', true); s.close(); this.session = localSession(); });
     s.on('goto', (m) => this.onGoto(m));
@@ -1226,6 +1234,7 @@ class App {
         ${sec('🕹', 'Movement tech', 'Jump height depends on how long you hold. You can jump slightly after leaving a ledge and presses just before landing still count. Hold down + jump to drop through wafer platforms. Hold down in the air to fall faster. Run off the screen edge to wrap around!')}
         ${sec('⭐', 'Stars & sprinkles', 'Each level has 3 stars: clear it, beat the par time, and take few hits. Collect 💎 sprinkles to buy hats. Pick a <b>Topping</b> perk between levels to power up your run.')}
         ${sec('🌐', 'Online co-op', 'Tap <b>Online Co-op → Host</b> and share the link or QR code. Friends open it on their phones and join instantly — up to 4 players. Gamepads and a shared keyboard work for local co-op too.')}
+        <div class="howto-card about"><div class="hi">🧁</div><div><h4>About</h4><p>Pastry Paladins v1.0 — every sprite is drawn in code and every sound is synthesized live. Online play uses <b>PeerJS</b> (MIT) for WebRTC and <b>qrcode-generator</b> (MIT) for invite codes. Fonts: <b>Fredoka</b> and <b>Lilita One</b> (SIL OFL). Built with Claude Code. Thanks for playing!</p></div></div>
       </div>`);
   }
 }

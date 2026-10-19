@@ -240,16 +240,15 @@ export class World {
     this.realDt = dt;
     if (this.slowmo > 0) { this.slowmo -= dt; dt *= 0.35; }
     this.stateT += dt;
-    // sample controllers
-    for (const p of this.players) if (p.local && p.ctl) { p.ctl.sample(); if (this.inputBlocked) p.ctl.neutralize(); }
-    this.cfg.endSample?.();
-
     if (this.hitstop > 0) {
+      // freeze-frame; controllers are not sampled so presses made now are kept for the next step
       this.hitstop -= this.realDt;
       this.fx.update(dt * 0.15);
       this.netTick();
       return;
     }
+    for (const p of this.players) if (p.local && p.ctl) { p.ctl.sample(); if (this.inputBlocked) p.ctl.neutralize(); }
+    this.cfg.endSample?.();
     this.time += dt;
     this.step++;
 
@@ -447,7 +446,7 @@ export class World {
         if (e.burnTick <= 0) {
           e.burnTick = 0.5;
           this.applyHit(e, 1, { burnTick: true }, e.burnBy);
-          if (e.dead) { this.enemies.splice(i, 1); continue; }
+          if (e.dead) continue; // killEnemy already removed it
         }
       }
       const disabled = e.frozen > 0 || e.stun > 0 || e.kbT > 0;
@@ -719,7 +718,7 @@ export class World {
 
   meleeCheck(p, r, dmg, o, hitSet) {
     let hits = 0;
-    for (const e of this.enemies) {
+    for (const e of [...this.enemies]) {
       if (hitSet.has(e.id) || e.dead || e.spawning > 0 || e.phased) continue;
       const er = { x: e.x, y: e.y, w: e.w, h: e.h };
       if (!this.overlapW(r, er)) continue;
@@ -841,7 +840,7 @@ export class World {
         }
       }
       if (!dead && !b.harmless) {
-        for (const e of this.enemies) {
+        for (const e of [...this.enemies]) {
           if (e.dead || e.spawning > 0 || e.phased || b.hit.has(e.id)) continue;
           const er = { x: e.x, y: e.y, w: e.w, h: e.h };
           if (!circleRect(b.x, b.y, b.r, er) && !circleRect(b.x + W, b.y, b.r, er) && !circleRect(b.x - W, b.y, b.r, er)) continue;
@@ -993,7 +992,7 @@ export class World {
   contactChecks(dt) {
     for (const p of this.players) {
       if (!p.local || p.down) continue;
-      for (const e of this.enemies) {
+      for (const e of [...this.enemies]) {
         if (e.dead || e.spawning > 0 || e.phased) continue;
         const shapes = [{ x: e.x + 1, y: e.y + 1, w: e.w - 2, h: e.h - 1 }];
         const pr = { x: p.x + 1, y: p.y, w: p.w - 2, h: p.h };
