@@ -289,7 +289,18 @@ export class World {
       if (o.type === 'collect') {
         if (!o.golden && o.count >= o.goal) {
           o.golden = true;
-          this.spawnPickup('golden', W / 2, 24, 0, 0);
+          // float the golden muffin above a reachable platform (prefer raised ones, away from the team)
+          const raised = this.standSpots.filter((sp) => sp.y <= 13 * TILE);
+          const pool = raised.length ? raised : this.standSpots;
+          let best = pool[0] || { x: W / 2, y: H / 2 }, bd = -1;
+          for (const sp of pool) {
+            let d = 1e9;
+            for (const pl of this.players) if (pl.present && !pl.down) d = Math.min(d, Math.hypot(pl.cx - sp.x, pl.cy - sp.y));
+            d = Math.min(d, 220) * rand(0.6, 1);
+            if (d > bd) { bd = d; best = sp; }
+          }
+          const gk = this.spawnPickup('golden', best.x, best.y - 12, 0, 0);
+          gk.float = true;
           this.banner('GOLDEN MUFFIN!', 'Grab it to clear the level!');
           this.broadcastEv({ type: 'sfx', n: 'golden' }, true);
         }
@@ -552,6 +563,9 @@ export class World {
       if (p?.local && !p.down) { p.hp = Math.min(p.maxHp, p.hp + 1); this.fx.text(p.cx, p.y - 8, '+♥', { color: '#ff7a9a', size: 9 }); }
     } else if (m.k === 'rush') {
       sfx('golden');
+      this.fx.sparkle(x, y, 20, '#ffe14d');
+      if (p) this.fx.text(x, y - 10, 'SUGAR RUSH!', { color: '#ff7ad9', size: 10, life: 1.2 });
+      if (p?.local && !p.down) p.rushT = 8;
     }
   }
 
@@ -567,7 +581,7 @@ export class World {
       sfx('shield', { pan: this.pan(e.x) });
       return false;
     }
-    let mult = p.mods.dmg;
+    let mult = p.mods.dmg * (p.rushT > 0 ? 1.5 : 1);
     const crit = Math.random() < p.mods.crit;
     const frozen = e.frozen > 0;
     if (frozen) mult *= 1.5;
@@ -656,6 +670,7 @@ export class World {
     } else if (chance(0.35)) this.spawnPickup('muffin', cx, cy, rand(-60, 60), rand(-220, -140));
     const lowHp = this.players.some((p) => !p.down && p.hp <= 1);
     if (chance(lowHp ? 0.12 : 0.045)) this.spawnPickup('heart', cx, cy, rand(-50, 50), -220);
+    if (chance(0.025) || (this.combo > 0 && this.combo % 25 === 0)) { const rk = this.spawnPickup('rush', cx, cy, rand(-40, 40), -260); rk.life = 9; }
     const coins = chance(0.4) ? (e.enraged ? randi(2, 3) : 1) : 0;
     for (let i = 0; i < coins; i++) this.spawnPickup('coin', cx, cy, rand(-90, 90), rand(-260, -160));
   }
@@ -982,6 +997,12 @@ export class World {
           }
         }
         if (!touching && !segHit) continue;
+        if (p.rushT > 0 && !e.def.boss) {
+          // Sugar Rush: plough through enemies
+          const now = performance.now();
+          if (!(e._rushHit > now)) { e._rushHit = now + 300; this.hitEnemy(p, e, 4, { kbx: Math.sign(e.x - p.x || 1) * 220, kby: -160, heavy: true }); }
+          continue;
+        }
         const stompDef = e.def.stomp;
         const feet = p.y + p.h;
         const canStomp = touching && p.vy > 30 && feet - e.y < Math.max(9, p.vy * dt * 2 + 5);

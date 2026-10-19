@@ -1,0 +1,128 @@
+# Pastry Paladins — Design Notes
+
+This is a design document for a co-op arena platformer in the spirit of *Muffin Knight*.
+It covers the research behind the game, the principles drawn from it, and how each one shows up in the mechanics.
+
+---
+
+## 1. Reference games and what we took from them
+
+| Game | What it teaches | Where it lives in Pastry Paladins |
+|---|---|---|
+| **Muffin Knight** (Angry Mob Games, 2014) | An arena platformer where you collect muffins. It has many playable characters, each with a special ability, plus perks during quests, a final boss, and co-op. | Collect-the-muffins objective, 6 distinct heroes, the "Topping" perks, and the Burnt Baron as final boss. |
+| **Mario Bros. / Super Crate Box** | Single-screen arenas, screen wrap, and enemies that come back angrier if you let them fall. | Every level fits on one screen, edges wrap, and enemies that fall into pits or lava return **ENRAGED**. |
+| **Celeste** | "Forgiving input" makes hard platforming feel fair. | Coyote time (0.1 s), jump buffering (0.13 s), variable jump height, apex hang time, and fast-fall. |
+| **Hollow Knight** | The downward "pogo" strike turns combat into movement. | Sir Brioche's down-air slash bounces off enemies. |
+| **Downwell** | Recoil as mobility gives you a skill expression you discover yourself. | Pepper Jack's shotgun recoil works as a rocket-jump. |
+| **Vlambeer, "The Art of Screenshake"** | Juice: hit-stop, shake, particles, squash and stretch, and sound pitch-shifting. | Trauma-based screen shake, hit-stop on heavy hits, squash on land and jump, combo-pitched SFX, and damage numbers. |
+| **Overcooked / It Takes Two** | Co-op gets its strength from players *needing* each other. | Role kits that synergize (freeze, mark, heal, block) and revive bubbles. |
+
+## 2. Game theory and co-op design
+
+Co-op games are **positive-sum games**: the team only wins if the team wins.
+The risk is that individual incentives drift away from the team's interest.
+That drift shows up as free-riding, hoarding shared resources, or blaming teammates.
+We designed each system so that the selfish move and the team move are the same move.
+
+### 2.1 Positive interdependence
+Social interdependence theory separates three kinds of design.
+In *individualistic* designs, my actions don't affect you.
+In *cooperative* designs, my actions help you.
+In *competitive* designs, my gain is your loss.
+The practitioner rule of thumb is that *each player should hold a capability the others need*.
+- **Mira** freezes enemies, and frozen enemies take **+50%** damage from *everyone*. Stomping one makes it shatter.
+- **Cinna**'s arrows **mark** enemies for **+25%** damage from the whole team.
+- **Dr. Fizz**'s Healing Brew heals the team and **triples revive speed**.
+- **Sir Brioche**'s sword swings and shield charge **delete enemy projectiles**, which protects the players behind him.
+- **Revives**: a downed hero becomes a floating bubble and can only come back when a teammate stands next to them. Downed players can steer their bubble, so they stay engaged instead of waiting out a death screen.
+
+### 2.2 Aligned incentives
+- **Team combo**: kills by anyone build one shared multiplier, and *anyone* getting hit halves it. Defense is part of scoring, and a teammate's mistake costs you too, so you protect each other.
+- **Team stars**: star goals measure the team (total time, total hits, nobody downed). That avoids a zero-sum split of the credit.
+- **Hearts go where they're needed**: a player at full health doesn't vacuum up a heart while a teammate is hurt. This removes a small *tragedy of the commons*.
+
+### 2.3 Coopetition
+Friendly rivalry keeps a group engaged, as long as it never makes cooperating worse.
+The results screen gives **awards**: MVP, Muffin Monster, Slayer, Guardian Angel, Stomp King, and Untouchable.
+They're bragging rights with no in-game effect, so competing for them never hurts the team.
+*Guardian Angel* rewards revives specifically, which makes altruism a high-status act.
+
+### 2.4 Scaling with player count
+Each extra player adds:
+- **+40%** enemy HP and **+65%** boss HP.
+- **+30%** concurrent enemies.
+- **+20%** muffin goal.
+- More lenient star thresholds.
+
+The aim is the same "challenge per head" whether you play solo or with four.
+Solo players get **spare lives**, which auto-revive them, because nobody else can.
+
+### 2.5 Dynamic difficulty, gently
+- Heart drop chance rises from 4.5% to **12%** while any player is on their last heart. This is a pity mechanic you never see.
+- The spawn director ramps intensity over time inside each level, and it opens portals **far from players**, so spawns are never cheap shots.
+- The **Casual / Normal / Hard** settings scale enemy HP, enemy speed, and spawn rate. On Casual, downed co-op players also auto-revive after 12 s.
+
+## 3. Skill: risk vs. reward
+Skill-based games reward players who take on more risk with more precision.
+
+| Mechanic | Risk | Reward |
+|---|---|---|
+| **Stomp** | You have to approach from above. Spiky enemies punish a careless stomp. | A bounce (higher if you hold jump), a refreshed double jump, and stun. |
+| **Enrage** | Enemies knocked into pits come back faster and tougher. | They're worth ×1.5 score and drop an extra muffin. |
+| **Perfect Release** (Cinna) | You move at 60% speed while drawing the bow. | Releasing in the ~0.2 s flash window gives a ×1.5 crit plus pierce. |
+| **Shadow Step** (Mochi) | You commit to a dash *through* enemies. | The cooldown resets instantly if the dash kills, so skilled play chains dashes. |
+| **Recoil** (Pepper) | Every shot pushes you around. | Shooting down while airborne launches you, and chili bombs rocket-jump you. |
+| **Charge** (Mira) | You hold attack and aren't firing bolts while you do. | An explosive fireball that sets enemies on fire. |
+| **Combo multiplier** | Getting hit halves it. | Up to ×4 score. |
+| **Golden Muffin** | It appears on a platform *away from* the team, while enemies keep spawning. | It clears the level, and speed earns a star. |
+| **Bonus muffins** | They float in exposed spots and expire. | Progress toward the goal without a kill. |
+
+### Readability and fairness
+- Every enemy attack has a **telegraph of at least 0.35 s**: glowing eyes, wind-up shakes, red "!" columns for falling hazards, dashed lines before the wyrm swoops, and target circles before King Gelatino slams.
+- **Silhouettes** are distinct: the heroes are a bun, a macaron, a cinnamon roll, a gummy bear, a chili, and a mochi.
+- Player colors (P1 red, P2 blue, P3 green, P4 gold) appear on tags, HUD cards, and arrows.
+- **Generous hitboxes for the player**: enemy shots test against a hitbox 2 px smaller than the sprite.
+- Enraged enemies glow red, and armored states draw a shield ring. Hits on armored enemies "clink" and do nothing, so the rule teaches itself.
+
+## 4. Flow and progression
+Csikszentmihalyi's *flow* channel means keeping challenge in step with growing skill.
+- **4 worlds × 5 levels**. Each world introduces 1–3 new enemy types and ends with a boss that tests what the world taught:
+  - **King Gelatino** tests jumping over shockwaves.
+  - **Cocoa Colossus** tests punishing a vulnerable window.
+  - **Sorbet Wyrm** tests reading telegraphs.
+  - **Burnt Baron** tests bullet-pattern reading across three phases.
+- There are 3 objective types (Collect, Survive, Boss) for pacing variety. Endless uses Waves.
+- **Stars** (60 in total) give mastery goals beyond "clear it". They gate cosmetic hats, never content.
+- **Toppings** are 19 roguelite perks with rarities. You pick 1 of 3 between levels, which is a meaningful choice with build variety (Glass Candy is a real trade-off). You keep them for the whole run.
+- **Unlocks**: Pepper Jack unlocks after World 1, and Mochi after World 2. *Party mode* in Settings unlocks everything for groups who just want to play.
+- **Endless** and **Boss Rush** give replay value. Your best Endless stage is saved.
+
+## 5. Game feel numbers
+| Parameter | Value |
+|---|---|
+| Simulation | Fixed 60 Hz, sub-stepped collision |
+| Jump velocity | 378 u/s, about 4.5 tiles high |
+| Gravity | 980 rising with jump held, 1650 falling or released (asymmetric = snappy) |
+| Apex hang | ×0.55 gravity when \|vy\| < 45 and jump is held |
+| Jump cut | Releasing jump while rising halves vy |
+| Coyote / buffer | 0.10 s / 0.13 s |
+| Ground acceleration | 1700 (×1.6 when turning around), ice 420 |
+| Hit-stop | 25 ms on normal hits, 60 ms on heavy hits and crits, 70 ms when you get hit |
+| Invulnerability | 1.1 s after a hit (more with *Thick Crust*) |
+
+## 6. Online architecture
+Mobile co-op means every friend is on their own phone. Room codes run over WebRTC (PeerJS).
+- **Host-authoritative world**: the host simulates enemies, spawns, pickups, objectives, and score. It broadcasts 20 Hz snapshots.
+- **Client-authoritative movement**: you simulate your own hero locally, so controls have zero input lag even on mobile networks.
+- **Favor the shooter**: your attacks hit what *you* see. The hit is predicted locally (flash, numbers, hit-stop) and confirmed by the host.
+- **Interpolation**: remote entities render 110 ms in the past, between snapshots.
+- **Deterministic projectiles**: the host sends each enemy shot once as a spawn event. Each client then simulates it locally, so dodging is judged against what you actually saw.
+- Clients relay cosmetic events (shots, zones, effects) through the host.
+- Disconnects are handled without crashing the game.
+
+## Sources
+- [Muffin Knight on Steam](https://store.steampowered.com/app/263700)
+- [Positive interdependence (Wikipedia)](https://en.wikipedia.org/wiki/Positive_interdependence)
+- [Leveraging Asymmetry and Interdependence to Enhance Social Connectedness in Cooperative Digital Games (University of Waterloo)](https://uwspace.uwaterloo.ca/handle/10012/14710)
+- [Building Co-op Games: practitioner notes on interdependence](https://api.bybrand.io/building-co-op-games-3603191961.html)
+- [Platformer feel conventions: coyote time, jump buffering, asymmetric gravity](https://claudeskills.info/skills/gamedev-skills/awesome-gamedev-agent-skills/platformer/)

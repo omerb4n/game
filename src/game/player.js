@@ -54,6 +54,7 @@ export class Player {
     this.killCount = 0;
     this.healTick = 0;
     this.shield = 0;
+    this.rushT = 0;
     // anim
     this.sq = 0; this.runT = 0; this.blinkT = rand(2, 4); this.blink = false; this.hurtT = 0; this.t = rand(10);
     this.flash = 0;
@@ -121,6 +122,10 @@ export class Player {
     this.comboT -= dt;
     this.dropT -= dt;
     this.shield = Math.max(0, this.shield - dt);
+    if (this.rushT > 0) {
+      this.rushT -= dt;
+      if (Math.random() < 0.7) w.fx.add({ x: this.cx + rand(-5, 5), y: this.cy + rand(-6, 6), life: 0.35, size: 2.2, color: `hsl(${(this.t * 600) % 360},100%,70%)`, add: true, shape: 'star' });
+    }
 
     // facing / aim
     if (c.x && this.dashT <= 0) this.facing = c.x > 0 ? 1 : -1;
@@ -129,7 +134,7 @@ export class Player {
 
     // horizontal movement
     const ice = this.onGround && this.groundTile === 6;
-    let maxSpd = this.hero.speed * this.mods.speed * (this.slowT > 0 ? 0.55 : 1) * (this.charging && this.hero.id === 'ranger' ? 0.6 : 1);
+    let maxSpd = this.hero.speed * this.mods.speed * (this.rushT > 0 ? 1.3 : 1) * (this.slowT > 0 ? 0.55 : 1) * (this.charging && this.hero.id === 'ranger' ? 0.6 : 1);
     if (this.dashT <= 0) {
       const target = c.x * maxSpd;
       let accel;
@@ -369,7 +374,7 @@ export class Player {
       hp: this.hp, mh: this.maxHp, d: this.down ? 1 : 0, iv: this.invuln > 0 ? 1 : 0, ax: round1(this.aimX), ay: round1(this.aimY),
       sw: this.swing.kind, st: round1(this.swing.t), sd: this.swing.dur, sb: this.swing.big ? 1 : 0, ch: round1(this.charge),
       og: this.onGround ? 1 : 0, rv: this.mods.reviveMul, rp: round1(this.reviveProg), ar: this.autoRevive > 0 ? 1 : 0,
-      mg: this.mods.magnet, sh: this.shield > 0 ? 1 : 0, rt: round1(this.runT), hu: this.hurtT > 0 ? 1 : 0,
+      mg: this.mods.magnet, sh: this.shield > 0 ? 1 : 0, ru: this.rushT > 0 ? 1 : 0, rt: round1(this.runT), hu: this.hurtT > 0 ? 1 : 0,
       cd: round1(this.specialMax ? this.cd.special / this.specialMax : 0),
     };
   }
@@ -392,6 +397,7 @@ export class Player {
     this.autoRevive = s.ar ? 1 : 0;
     this.remoteInvuln = !!s.iv;
     this.shield = s.sh ? 1 : 0;
+    this.rushT = s.ru ? 1 : 0;
     this.vx = s.vx; this.vy = s.vy;
     this.runT = s.rt;
     this.hurtT = s.hu ? 0.2 : 0;

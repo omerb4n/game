@@ -398,6 +398,12 @@ export class Renderer {
         const s = 9 + Math.sin(t * 8) * 0.8;
         heart(ctx, cx, cy - s / 2 + bob, s); ctx.fill(); ctx.stroke();
         ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(cx - 2, cy - 1 + bob, 1.2, 0, TAU); ctx.fill();
+      } else if (k.kind === 'rush') {
+        ctx.translate(cx, cy + bob);
+        ctx.rotate(Math.sin(t * 3) * 0.3);
+        ctx.fillStyle = `hsl(${(t * 300) % 360},100%,65%)`; ctx.strokeStyle = OL; ctx.lineWidth = 1.2;
+        star(ctx, 0, 0, 7, 3.2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-1.5, -1, 1, 0, TAU); ctx.arc(1.5, -1, 1, 0, TAU); ctx.fill();
       } else if (k.kind === 'coin') {
         const sx = Math.abs(Math.cos(t * 5 + k.id));
         ctx.translate(cx, cy + bob); ctx.scale(Math.max(0.15, sx), 1);
@@ -500,6 +506,14 @@ export class Renderer {
     if (hgt < 120) {
       ctx.save(); ctx.globalAlpha *= 0.25 * (1 - hgt / 120);
       ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(x, gy, 7 * (1 - hgt / 200), 2, 0, 0, TAU); ctx.fill();
+      ctx.restore();
+    }
+    if (p.rushT > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.45;
+      ctx.fillStyle = `hsl(${(t * 500) % 360},100%,60%)`;
+      ctx.beginPath(); ctx.arc(x, p.cy - 2, 14 + Math.sin(t * 20) * 1.5, 0, TAU); ctx.fill();
       ctx.restore();
     }
     const air = !p.onGround;
