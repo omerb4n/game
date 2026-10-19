@@ -15,6 +15,8 @@ Open `index.html` through any static web server (see below). On a phone, add it 
 3. Pick heroes, choose a mode, and tap **Let's Bake!**
 
 The connection is peer-to-peer over WebRTC, using the free PeerJS matchmaking server and its TURN fallback.
+To use your own [PeerServer](https://github.com/peers/peerjs-server), add `?peerhost=your.host&peerport=443&peerpath=/` to the URL.
+Invite links carry these parameters along automatically.
 
 ### Local co-op (one screen)
 - **Gamepads**: press **A** in the lobby to join. Up to 4 players.
@@ -76,6 +78,7 @@ npx http-server -p 8080 .
 # then open http://localhost:8080
 ```
 For testing online play on one machine, open two tabs with `?net=bc`. This uses a BroadcastChannel transport instead of WebRTC.
+Add `&lag=150` to simulate 150 ms of network latency with jitter.
 
 ## Deploy
 The included GitHub Action (`.github/workflows/pages.yml`) publishes the game to GitHub Pages on every push to `main`.

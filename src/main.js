@@ -602,7 +602,11 @@ class App {
     }
   }
   shareUrl() {
-    return `${location.origin}${location.pathname}?join=${this.session.code}${USE_BC ? '&net=bc' : ''}`;
+    // keep transport-related params (custom PeerServer / test transport) in the invite link
+    const keep = new URLSearchParams();
+    for (const k of ['net', 'peerhost', 'peerport', 'peerpath', 'peersecure']) if (params.get(k)) keep.set(k, params.get(k));
+    keep.set('join', this.session.code);
+    return `${location.origin}${location.pathname}?${keep.toString()}`;
   }
   async copyLink() {
     const url = this.shareUrl();

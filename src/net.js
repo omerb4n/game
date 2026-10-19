@@ -2,6 +2,18 @@
 import { uid } from './util.js';
 
 const PREFIX = 'pastrypaladins-v1-';
+// Optional self-hosted PeerServer: ?peerhost=example.com&peerport=443&peerpath=/
+function peerOptions() {
+  const q = new URLSearchParams(location.search);
+  const o = { debug: 0 };
+  if (q.get('peerhost')) {
+    o.host = q.get('peerhost');
+    o.port = Number(q.get('peerport') || (location.protocol === 'https:' ? 443 : 80));
+    o.path = q.get('peerpath') || '/';
+    o.secure = q.has('peersecure') ? q.get('peersecure') === '1' : location.protocol === 'https:';
+  }
+  return o;
+}
 let peerLibPromise = null;
 
 function loadPeerJS() {
@@ -114,7 +126,7 @@ async function hostPeer(code) {
   const s = new Session('host');
   s.code = code;
   return new Promise((resolve, reject) => {
-    const peer = new Peer(PREFIX + code, { debug: 0 });
+    const peer = new Peer(PREFIX + code, peerOptions());
     let opened = false;
     s._closeTransport = () => { try { peer.destroy(); } catch (e) { /* ignore */ } };
     peer.on('open', () => { opened = true; s.startHeartbeat(); resolve(s); });
@@ -147,7 +159,7 @@ export async function joinSession(code, useBC = false) {
   const s = new Session('client');
   s.code = code;
   return new Promise((resolve, reject) => {
-    const peer = new Peer(undefined, { debug: 0 });
+    const peer = new Peer(undefined, peerOptions());
     let done = false;
     s._closeTransport = () => { try { peer.destroy(); } catch (e) { /* ignore */ } };
     peer.on('error', (err) => {
@@ -171,6 +183,12 @@ export async function joinSession(code, useBC = false) {
 }
 
 // ---------------------------------------------------------------- BroadcastChannel transport (same device, testing)
+// ?lag=ms adds simulated one-way latency with jitter, to test netcode on one machine.
+const LAG = Number(new URLSearchParams(location.search).get('lag') || 0);
+function post(ch, msg) {
+  if (!LAG) return ch.postMessage(msg);
+  setTimeout(() => { try { ch.postMessage(msg); } catch (e) { /* closed */ } }, LAG / 2 + Math.random() * LAG * 0.2);
+}
 function hostBC(code) {
   const s = new Session('host');
   s.code = code;
@@ -180,7 +198,7 @@ function hostBC(code) {
     const { from, to, data } = ev.data;
     if (to !== 'host') return;
     if (data.type === '__hello') {
-      s._addPeer(from, (m) => ch.postMessage({ from: 'host', to: from, data: m }), () => {});
+      s._addPeer(from, (m) => post(ch, { from: 'host', to: from, data: m }), () => {});
       ch.postMessage({ from: 'host', to: from, data: { type: '__welcome' } });
       s.onPeerJoin?.(from);
       return;
@@ -205,7 +223,7 @@ function joinBC(code) {
       if (data.type === '__welcome') {
         if (done) return;
         done = true;
-        s._addPeer('host', (m) => ch.postMessage({ from: s.myId, to: 'host', data: m }), () => {});
+        s._addPeer('host', (m) => post(ch, { from: s.myId, to: 'host', data: m }), () => {});
         s.startHeartbeat();
         resolve(s);
         return;
