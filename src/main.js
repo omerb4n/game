@@ -217,7 +217,7 @@ class App {
     this.screen = name;
     this.ui.className = `ui-${name}`;
     this.ui.innerHTML = `<div class="screen ${name} ${cls}">${html}</div>`;
-    const first = $('[data-autofocus]', this.ui) || $('[data-nav]', this.ui);
+    const first = $('[data-autofocus]:not(:disabled)', this.ui) || $('[data-nav]:not([data-act="back"]):not(:disabled)', this.ui);
     if (first && !isTouchDevice()) setTimeout(() => first.focus({ preventScroll: true }), 30);
     touch.show(name === 'game' && this.hasTouchPlayer());
     $('#pausebtn').classList.toggle('on', name === 'game' && !isTouchDevice());
@@ -510,7 +510,7 @@ class App {
           <div class="opt"><div class="lbl">Mode</div><div class="chips">${modeBtns}</div><div class="desc">${MODES[this.lobby.mode].desc}${this.lobby.mode === 'endless' && S().endlessBest ? ` <b>Best: stage ${S().endlessBest}</b>` : ''}</div></div>
           <div class="opt"><div class="lbl">Difficulty</div><div class="chips">${diffBtns}</div></div>
           ${this.lobby.mode !== 'campaign' ? `<div class="opt"><div class="lbl">Mutators</div><div class="chips">${Object.entries(MUTATORS).map(([k, m]) => `<button class="btn chip ${(this.lobby.mutators || []).includes(k) ? 'sel' : ''}" data-nav data-act="mut" data-mut="${k}" title="${esc(m.desc)}" ${isClient ? 'disabled' : ''}>${m.icon} ${m.name}</button>`).join('')}</div>${(this.lobby.mutators || []).length ? `<div class="desc">${this.lobby.mutators.map((k) => esc(MUTATORS[k].desc)).join(' · ')}</div>` : ''}</div>` : ''}
-          ${isClient ? '<div class="wait big">Waiting for the host to start…</div>' : `<button class="btn big primary" data-nav data-act="startLobby" ${canStart ? '' : 'disabled'}>Let's Bake! ▶</button>`}
+          ${isClient ? '<div class="wait big">Waiting for the host to start…</div>' : `<button class="btn big primary" data-nav data-autofocus data-act="startLobby" ${canStart ? '' : 'disabled'}>Let's Bake! ▶</button>`}
           <div class="ctrl-help">${ctrlHelp}</div>
         </div>
       </div>
@@ -740,15 +740,16 @@ class App {
     const W0 = WORLDS[sel.world - 1];
     const unlockedW = worldUnlocked(sel.world);
     const levels = worldLevels(sel.world);
+    const L = sel.level ? levelById(sel.level) : null;
+    const focusId = sel.level || (levels.find((l) => levelUnlocked(l) && !(levelRecord(l.id)?.stars[0])) || levels.filter(levelUnlocked).pop())?.id;
     const nodes = levels.map((l, i) => {
       const rec = levelRecord(l.id);
       const un = levelUnlocked(l);
       const icon = l.type === 'boss' ? '☠' : l.type === 'survive' ? '⏱' : '🧁';
-      return `<button class="lnode ${sel.level === l.id ? 'sel' : ''} ${un ? '' : 'locked'} ${l.type}" data-nav data-act="selLevel" data-level="${l.id}" ${un && !isClient ? '' : 'disabled'}>
+      return `<button class="lnode ${sel.level === l.id ? 'sel' : ''} ${un ? '' : 'locked'} ${l.type}" data-nav ${focusId === l.id && !L ? 'data-autofocus' : ''} data-act="selLevel" data-level="${l.id}" ${un && !isClient ? '' : 'disabled'}>
         <span class="ln-i">${un ? icon : '🔒'}</span><span class="ln-n">${l.id}</span>${this.starsHtml(rec?.stars, 'sm')}</button>${i < levels.length - 1 ? '<span class="lpath"></span>' : ''}`;
     }).join('');
     let detail = '';
-    const L = sel.level ? levelById(sel.level) : null;
     if (L) {
       const rec = levelRecord(L.id);
       const fake = { level: L, nPlayers: Math.max(1, this.roster.length) };
