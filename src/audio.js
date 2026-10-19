@@ -36,7 +36,7 @@ export function applyVolumes() {
   if (!ctx) return;
   const s = settings();
   master.gain.value = s.master;
-  musicBus.gain.value = s.music * 0.5 * duck;
+  musicBus.gain.value = s.music * 0.65 * duck;
   sfxBus.gain.value = s.sfx * 0.9;
 }
 
@@ -44,7 +44,7 @@ let duck = 1;
 export function setDuck(v) {
   duck = v;
   if (!ctx) return;
-  musicBus.gain.setTargetAtTime(settings().music * 0.5 * duck, ctx.currentTime, 0.1);
+  musicBus.gain.setTargetAtTime(settings().music * 0.65 * duck, ctx.currentTime, 0.1);
 }
 
 function now() { return ctx.currentTime; }
@@ -395,3 +395,27 @@ export function stopMusic() {
 }
 
 export function currentMusic() { return music ? music.name : null; }
+
+// Dev/test helper: render a few seconds of a music track offline and return level statistics.
+export async function analyzeTrack(name, seconds = 8) {
+  const sr = 22050;
+  const off = new OfflineAudioContext(1, sr * seconds, sr);
+  const saved = { ctx, musicBus, noiseBuf };
+  ctx = off;
+  musicBus = off.createGain();
+  musicBus.gain.value = 0.5 * 0.6;
+  musicBus.connect(off.destination);
+  noiseBuf = off.createBuffer(1, sr, sr);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const track = TRACKS[name];
+  const m = { name, track, step: 0, nextTime: 0.05, melody: buildMelody(track), intensity: 1 };
+  const sixteenth = 60 / track.bpm / 4;
+  while (m.nextTime < seconds - 0.5) { scheduleStep(m, m.nextTime); m.nextTime += sixteenth; m.step++; }
+  ctx = saved.ctx; musicBus = saved.musicBus; noiseBuf = saved.noiseBuf;
+  const buf = await off.startRendering();
+  const data = buf.getChannelData(0);
+  let peak = 0, sum = 0;
+  for (const v of data) { const a = Math.abs(v); if (a > peak) peak = a; sum += v * v; }
+  return { name, rms: Math.sqrt(sum / data.length), peak, samples: Array.from(data) };
+}
