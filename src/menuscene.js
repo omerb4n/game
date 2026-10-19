@@ -26,9 +26,14 @@ export class MenuScene {
     this.bots = HEROES.map((h, i) => ({ id: h.id, x: 40 + i * 80, y: 256, vx: (i % 2 ? -1 : 1) * rand(40, 80), vy: 0, f: 1, t: rand(10), jumpT: rand(0.5, 2), sq: 0 }));
     this.critters = [{ type: 'gumdrop', x: 100, f: 1, id: 1 }, { type: 'gumdrop', x: 380, f: -1, id: 2 }];
     this.muffins = [];
+    this.confetti = [];
     this.focusHero = null;
   }
   setTheme(i) { this.themeIdx = i; this.tileKey = ''; }
+  celebrate(n = 140) {
+    const cols = ['#ff5a9e', '#ffd34d', '#5ad1ff', '#7be08b', '#c9a6ff', '#ffffff'];
+    for (let i = 0; i < n; i++) this.confetti.push({ x: rand(0, W), y: rand(-H * 0.6, -5), vx: rand(-20, 20), vy: rand(40, 110), r: rand(TAU), vr: rand(-8, 8), w: rand(2, 4), h: rand(3, 6), c: pick(cols), sway: rand(TAU) });
+  }
   update(dt) {
     this.t += dt;
     const groundAt = (x, y) => {
@@ -60,6 +65,8 @@ export class MenuScene {
     if (Math.random() < dt * 1.2) this.muffins.push({ x: rand(20, W - 20), y: -10, vy: rand(30, 60), r: rand(TAU), vr: rand(-2, 2), g: Math.random() < 0.1 });
     for (const m of this.muffins) { m.y += m.vy * dt; m.r += m.vr * dt; }
     this.muffins = this.muffins.filter((m) => m.y < H + 20);
+    for (const c of this.confetti) { c.sway += dt * 3; c.x += (c.vx + Math.sin(c.sway) * 30) * dt; c.y += c.vy * dt; c.r += c.vr * dt; }
+    this.confetti = this.confetti.filter((c) => c.y < H + 10);
     // cycle worlds slowly, only through ones the player has reached
     const reached = Math.min(4, Math.max(1, (S().worldsCleared?.length || 0) + 1));
     const idx = Math.floor(this.t / 14) % reached;
@@ -92,6 +99,10 @@ export class MenuScene {
     for (const m of this.muffins) {
       ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(m.r); ctx.globalAlpha = 0.85;
       drawMuffin(ctx, 0, 0, 9, m.g); ctx.restore();
+    }
+    for (const c of this.confetti) {
+      ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.r); ctx.scale(Math.cos(c.sway * 2), 1);
+      ctx.fillStyle = c.c; ctx.fillRect(-c.w / 2, -c.h / 2, c.w, c.h); ctx.restore();
     }
     for (const c of this.critters) ENEMIES[c.type].draw(ctx, { x: c.x - 7, y: 244, w: 14, h: 12, vy: Math.sin(this.t * 6 + c.id) * 60, facing: c.f, id: c.id, enraged: false }, this.t);
     for (const b of this.bots) {

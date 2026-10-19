@@ -94,6 +94,8 @@ class App {
     });
     this.ui.addEventListener('pointerover', (e) => { const el = e.target.closest('[data-nav]'); if (el && !el.disabled && el !== this.lastHover) { this.lastHover = el; sfx('hover'); } });
     window.addEventListener('keydown', () => { if (this.screen === 'lobby') this.kbTouched = true; });
+    window.addEventListener('contextmenu', (e) => { if (!e.target.closest?.('input')) e.preventDefault(); });
+    document.addEventListener('gesturestart', (e) => e.preventDefault());
     window.addEventListener('gamepadconnected', () => { if (this.screen === 'lobby') this.toast('🎮 Gamepad connected — press A to join!'); });
     const join = params.get('join');
     if (join) this.goJoin(join.toUpperCase());
@@ -151,9 +153,7 @@ class App {
 
   // =============================================================== NAV
   onPadEvent(ev) {
-    if (this.screen === 'lobby' && !this.session.online || (this.screen === 'lobby' && this.session.online)) {
-      if (this.lobbyPadEvent(ev)) return;
-    }
+    if (this.screen === 'lobby' && this.lobbyPadEvent(ev)) return;
     if (this.screen === 'game') return;
     const map = { up: 'up', down: 'down', left: 'left', right: 'right', ok: 'ok', back: 'back', start: 'ok' };
     if (map[ev.dir]) this.onNav({ dir: map[ev.dir], device: 'pad', padIndex: ev.padIndex });
@@ -161,7 +161,6 @@ class App {
   onNav(ev) {
     if (this.screen === 'game') return;
     if (ev.device === 'keyboard' && document.activeElement?.tagName === 'INPUT' && ev.dir !== 'back') return;
-    if (this.screen === 'lobby' && ev.device === 'keyboard' && this.lobbyKeyEvent(ev)) return;
     const items = $$('[data-nav]', this.ui).filter((e) => e.offsetParent !== null && !e.disabled);
     if (!items.length) return;
     let cur = document.activeElement;
@@ -391,9 +390,6 @@ class App {
     if (ev.dir === 'up' || ev.dir === 'down' || ev.dir === 'ok') return false; // let menu nav handle
     return true;
   }
-  lobbyKeyEvent(ev) {
-    return false;
-  }
   addKeyboardPlayer() {
     if (this.localSlots.length >= 4 || this.roster.length >= 4) return;
     this.kbTouched = true;
@@ -466,6 +462,7 @@ class App {
             <canvas width="120" height="120" data-hero="${h.id}" data-hat="${esc(r.hat || 'none')}"></canvas>
             <div class="pc-name">${esc(h.name)}</div>
             <div class="pc-role">${esc(h.role)} · ${'❤'.repeat(h.hp)}</div>
+            <div class="pc-special">★ ${esc(h.special)}</div>
             ${mine ? `<div class="pc-arrows">
               <button class="btn sm" data-nav data-act="hero" data-slot="${mineIdx}" data-dir="-1">◀</button>
               <button class="btn sm hatbtn" data-nav data-act="hat" data-slot="${mineIdx}" data-dir="1" title="Change hat">🎩</button>
@@ -794,7 +791,6 @@ class App {
         end: (res) => this.onLevelEnd(res),
       },
     });
-    this.renderer.bannerS = [];
     this.renderer.banners.length = 0;
     this.renderer.bossHpShown = undefined;
     this.acc = 0;
@@ -877,6 +873,7 @@ class App {
           S().worldsCleared.push(L.world);
           for (const h of HEROES) if (h.unlock?.world === L.world && !prevWorlds.includes(L.world)) res.unlocks.push(`New hero: ${h.name} the ${h.role}!`);
           if (L.world < 4) res.unlocks.push(`World ${L.world + 1}: ${WORLDS[L.world].name} unlocked!`);
+          else res.unlocks.push('The Burnt Baron is toast — the Great Bakery is saved! Thanks for playing! 🧁');
         }
         if (L.type === 'collect' && res.time < 40) this.unlock('speed');
       }
@@ -942,9 +939,9 @@ class App {
     this.lastResult = res;
     const clear = res.kind === 'clear';
     const isClient = this.session.role === 'client';
-    playMusic('results');
-    if (clear) sfx('victory'); else sfx('defeat');
     const L = this.world?.level || levelById(res.levelId);
+    playMusic('results');
+    if (clear) { sfx('victory'); this.menu.celebrate(L?.type === 'boss' ? 260 : 140); } else sfx('defeat');
     const goals = this.world ? this.world.starGoals() : ['', '', ''];
     const aw = this.awards(res);
     const players = this.roster.map((r) => {

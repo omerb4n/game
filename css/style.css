@@ -20,7 +20,7 @@ html, body {
   font-family: Fredoka, 'Trebuchet MS', system-ui, sans-serif; font-weight: 600;
   user-select: none; -webkit-user-select: none; touch-action: none; overscroll-behavior: none;
 }
-#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; background: #2b1630; }
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: #2b1630; }
 #ui { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 #ui .screen { pointer-events: auto; }
 .screen {
@@ -104,6 +104,7 @@ small { display: block; font-size: 0.7rem; opacity: 0.7; font-weight: 500; }
 .pc-dev { font-size: 0.65rem; opacity: 0.75; text-align: right; flex: 1; }
 .pc-name { font-weight: 800; font-size: 1rem; text-align: center; }
 .pc-role { font-size: 0.75rem; color: #ffb3c8; }
+.pc-special { font-size: 0.68rem; color: var(--gold); opacity: 0.9; }
 .pc-arrows { display: flex; gap: 0.3rem; margin-top: auto; }
 .pc-arrows.muted { font-size: 0.75rem; }
 .x { position: absolute; top: -0.6rem; right: -0.6rem; width: 1.6rem; height: 1.6rem; border-radius: 50%; border: 2px solid var(--ol); background: #ff6a7a; color: #fff; font-weight: 800; cursor: pointer; font-size: 0.8rem; }
@@ -279,11 +280,11 @@ input[type=range]::-moz-range-thumb { width: 1.1rem; height: 1.1rem; border-radi
 .howto-card b { color: var(--pink2); }
 
 /* ---------------------------------------------------------------- TOASTS */
-#toasts { position: fixed; bottom: calc(0.8rem + var(--safe-b)); left: 50%; transform: translateX(-50%); z-index: 50; display: flex; flex-direction: column-reverse; gap: 0.4rem; align-items: center; pointer-events: none; }
-.toast { background: linear-gradient(135deg, #fff, #ffe9f3); color: var(--ol); border: 3px solid var(--ol); border-radius: 999px; padding: 0.35em 1.1em; font-size: 0.9rem; box-shadow: 0 0.25rem 0 var(--ol); display: flex; gap: 0.5rem; align-items: center; animation: toastIn 0.4s cubic-bezier(.2, 1.6, .5, 1); transition: opacity 0.5s, transform 0.5s; }
+#toasts { position: fixed; top: calc(3.2rem + var(--safe-t)); right: calc(0.8rem + var(--safe-r)); z-index: 50; display: flex; flex-direction: column; gap: 0.35rem; align-items: flex-end; pointer-events: none; max-width: 45vw; }
+.toast { background: linear-gradient(135deg, #fff, #ffe9f3); color: var(--ol); border: 3px solid var(--ol); border-radius: 999px; padding: 0.3em 1em; font-size: 0.8rem; box-shadow: 0 0.25rem 0 var(--ol); display: flex; gap: 0.5rem; align-items: center; animation: toastIn 0.4s cubic-bezier(.2, 1.6, .5, 1); transition: opacity 0.5s, transform 0.5s; }
 .toast .ti { font-size: 1.2rem; }
-.toast.out { opacity: 0; transform: translateY(1rem); }
-@keyframes toastIn { from { transform: translateY(2rem) scale(0.8); opacity: 0; } }
+.toast.out { opacity: 0; transform: translateX(1rem); }
+@keyframes toastIn { from { transform: translateX(2rem) scale(0.8); opacity: 0; } }
 
 /* ---------------------------------------------------------------- PAUSE BTN */
 #pausebtn { position: fixed; bottom: calc(0.7rem + var(--safe-b)); left: calc(0.7rem + var(--safe-l)); z-index: 6; display: none; width: 2.4rem; height: 2.4rem; border-radius: 50%; border: 3px solid var(--ol); background: rgba(255, 255, 255, 0.85); color: var(--ol); font-weight: 800; cursor: pointer; font-size: 0.8rem; }
