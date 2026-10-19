@@ -513,6 +513,16 @@ class App {
     if (kinds.has('pad')) parts.push('🎮 <b>A</b> jump · <b>X</b> attack · <b>B/Y/RB</b> special · ◀▶ in lobby to pick hero');
     return parts.join('<br>');
   }
+  controlsText() {
+    const kinds = new Set(this.localSlots.map((s) => s.ctl.kind));
+    const out = [];
+    if (kinds.has('touch')) out.push('Left thumb: move & aim  ·  Green: jump  ·  Pink: attack (hold to charge)  ·  Gold ★: special');
+    if (kinds.has('kbFull')) out.push('Move: WASD / Arrows  ·  Jump: Space  ·  Attack: X or J  ·  Special: C or L  ·  Down+Jump: drop');
+    if (kinds.has('kbLeft')) out.push('Left keyboard: WASD move · C jump · V attack · B special');
+    if (kinds.has('kbRight')) out.push('Right keyboard: Arrows move · K jump · L attack · ; special');
+    if (kinds.has('pad')) out.push('Gamepad: A jump · X attack · B/Y special · Start pause');
+    return out.slice(0, 3);
+  }
   leaveLobby() {
     if (this.session.online) { this.session.close(); this.session = localSession(); this.roster = []; }
     this.goTitle();
@@ -567,7 +577,7 @@ class App {
       this.lobby.diff = settings().difficulty;
       this.setupHostHandlers();
       this.goLobby();
-      this.toast(`Room ${code} is open!`, '🏠');
+      this.toast(`Room ${s.code} is open!`, "🏠");
     } catch (e) {
       this.netMsg(e.message || String(e), true);
     }

@@ -93,8 +93,23 @@ export function localSession() {
 }
 
 // ---------------------------------------------------------------- PeerJS transport
-export async function hostSession(code, useBC = false) {
+export async function hostSession(code, useBC = false, attempt = 0) {
   if (useBC) return hostBC(code);
+  try {
+    return await hostPeer(code);
+  } catch (e) {
+    // room code collision: retry with a fresh code
+    if (e.code === 'taken' && attempt < 3) {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let c = '';
+      for (let i = 0; i < 5; i++) c += chars[Math.floor(Math.random() * chars.length)];
+      return hostSession(c, false, attempt + 1);
+    }
+    throw e;
+  }
+}
+
+async function hostPeer(code) {
   const Peer = await loadPeerJS();
   const s = new Session('host');
   s.code = code;
@@ -104,7 +119,12 @@ export async function hostSession(code, useBC = false) {
     s._closeTransport = () => { try { peer.destroy(); } catch (e) { /* ignore */ } };
     peer.on('open', () => { opened = true; s.startHeartbeat(); resolve(s); });
     peer.on('error', (err) => {
-      if (!opened) reject(new Error(err.type === 'unavailable-id' ? 'Room code in use, try again.' : 'Could not create room: ' + (err.type || err.message)));
+      if (!opened) {
+        const e = new Error(err.type === 'unavailable-id' ? 'Room code in use, try again.' : 'Could not create room: ' + (err.type || err.message));
+        if (err.type === 'unavailable-id') e.code = 'taken';
+        try { peer.destroy(); } catch (x) { /* ignore */ }
+        reject(e);
+      }
     });
     peer.on('disconnected', () => { if (!s.closed) { try { peer.reconnect(); } catch (e) { /* ignore */ } } });
     peer.on('connection', (conn) => {

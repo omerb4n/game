@@ -281,8 +281,8 @@ export class Renderer {
   }
 
   drawDynamicTiles(ctx, world, t) {
-    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-      const tt = world.tiles[r * COLS + c];
+    for (const d of world.dynTiles) {
+      const { c, r } = d, tt = d.t;
       const x = c * TILE, y = r * TILE;
       if (tt === T_SPRING) {
         const comp = world.springAnim?.[c] || 0;
@@ -905,6 +905,11 @@ export class Renderer {
       if (L.tip) {
         ctx.font = `600 ${6.5 * hs}px ${FONT}`; ctx.fillStyle = '#c8f0ff';
         ctx.strokeText(`Tip: ${L.tip}`, cw / 2, y0 + 78 * hs); ctx.fillText(`Tip: ${L.tip}`, cw / 2, y0 + 78 * hs);
+      }
+      if (app?.controlsText && (L.id === '1-1' || L.id === 'E1')) {
+        ctx.font = `700 ${6.5 * hs}px ${FONT}`; ctx.fillStyle = '#ffe9a8';
+        const lines = app.controlsText();
+        lines.forEach((ln, i) => { ctx.strokeText(ln, cw / 2, y0 + (90 + i * 9) * hs); ctx.fillText(ln, cw / 2, y0 + (90 + i * 9) * hs); });
       }
       ctx.restore();
     } else this.introFading = false;

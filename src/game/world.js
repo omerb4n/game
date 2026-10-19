@@ -111,6 +111,11 @@ export class World {
       if (t === T_EMPTY && above === T_EMPTY && (isSolidT(below) || below === T_ONEWAY)) this.standSpots.push({ x: c * TILE + TILE / 2, y: (r + 1) * TILE });
     }
     this.hasLava = this.tiles.includes(T_LAVA);
+    this.dynTiles = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const t = this.tiles[r * COLS + c];
+      if (t === T_SPRING || t === T_LAVA) this.dynTiles.push({ c, r, t });
+    }
   }
   tileAt(c, r) {
     if (r < 0 || r >= ROWS) return T_EMPTY;
@@ -270,7 +275,7 @@ export class World {
   hostUpdate(dt) {
     const o = this.obj;
     if (this.state === 'intro') {
-      if (this.stateT > 2.2) {
+      if (this.stateT > (this.level.id === '1-1' ? 3.6 : 2.2)) {
         this.state = 'play'; this.stateT = 0;
         if (this.level.type === 'boss') this.spawnBoss();
       }
