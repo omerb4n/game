@@ -89,6 +89,12 @@ class App {
     window.addEventListener('resize', () => { this.renderer.resize(); });
     this.renderer.resize();
     const unlockAudio = () => { initAudio(); resumePendingMusic(); };
+    // Fullscreen needs a user gesture: enter it on the first tap (touch devices), and again when a level starts.
+    const firstTap = () => { this.autoFullscreen(); document.removeEventListener('touchend', firstTap, true); document.removeEventListener('pointerup', firstTap, true); };
+    if (isTouchDevice()) {
+      document.addEventListener('touchend', firstTap, true);
+      document.addEventListener('pointerup', firstTap, true);
+    }
     window.addEventListener('pointerdown', unlockAudio);
     window.addEventListener('keydown', unlockAudio);
     onNav((ev) => this.onNav(ev));
@@ -343,11 +349,25 @@ class App {
       case 'reset': if (confirm('Reset ALL progress, coins, hats and trophies?')) { resetSave(); this.toast('Progress reset'); this.goSettings(); } break;
     }
   }
-  toggleFullscreen() {
+  autoFullscreen() {
+    if (!settings().autoFullscreen || !isTouchDevice()) return;
+    if (document.fullscreenElement || document.webkitFullscreenElement) return;
+    if (window.matchMedia?.('(display-mode: fullscreen)').matches) return; // installed app is already fullscreen
+    this.enterFullscreen();
+  }
+  enterFullscreen() {
     const el = document.documentElement;
-    if (!document.fullscreenElement) {
-      (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el)?.then?.(() => { try { screen.orientation?.lock?.('landscape').catch(() => {}); } catch (e) { /* ignore */ } }).catch(() => {});
-    } else document.exitFullscreen?.();
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!req) return;
+    try {
+      const p = req.call(el, { navigationUI: 'hide' });
+      const lock = () => { try { screen.orientation?.lock?.('landscape')?.catch?.(() => {}); } catch (e) { /* unsupported */ } };
+      if (p && p.then) p.then(lock).catch(() => {}); else lock();
+    } catch (e) { /* not allowed right now */ }
+  }
+  toggleFullscreen() {
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) this.enterFullscreen();
+    else (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
   }
   applySettings() {
     applyVolumes();
@@ -817,6 +837,7 @@ class App {
   enterGame(spec, diff) {
     const level = this.levelFromSpec(spec);
     if (!level) return;
+    this.autoFullscreen();
     clearLatches();
     const localCtl = {};
     this.localSlots.forEach((s, i) => { localCtl[i] = s.ctl; s.ctl.clearEdges(); });
@@ -1206,6 +1227,7 @@ class App {
           ${choice('quality', 'Graphics', [['low', 'Battery saver'], ['high', 'Beautiful']])}
           ${toggle('reduceFlashes', 'Reduce flashes')}
           ${toggle('showFps', 'Show FPS / ping')}
+          ${toggle('autoFullscreen', 'Auto fullscreen', 'Go fullscreen on phones when you tap or start a level')}
           <div class="srow"><span>Fullscreen</span><button class="btn" data-nav data-act="fullscreen">⛶ Toggle</button></div>
           <div class="srow"><span>Progress</span><button class="btn danger" data-nav data-act="reset">Reset save…</button></div>
         </div>

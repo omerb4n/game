@@ -291,29 +291,31 @@ input[type=range]::-moz-range-thumb { width: 1.1rem; height: 1.1rem; border-radi
 #pausebtn.on { display: block; }
 
 /* ---------------------------------------------------------------- TOUCH */
-#touch { position: fixed; inset: 0; z-index: 4; display: none; --tsize: 1; --topa: 0.55; }
+/* --B is the base button size: ~26% of screen height (about a thumb pad), scaled by the setting.
+   Buttons sit in an arc around the right thumb: attack low-left, jump right, special above attack. */
+#touch { position: fixed; inset: 0; z-index: 4; display: none; --tsize: 1; --topa: 0.55; --B: calc(clamp(64px, 26vh, 130px) * var(--tsize)); }
 #touch.on { display: block; }
 .t-zone { position: absolute; inset: 0; }
-.t-stick { position: absolute; width: calc(7.5rem * var(--tsize)); height: calc(7.5rem * var(--tsize)); transform: translate(-50%, -50%); border-radius: 50%; border: 3px solid rgba(255, 255, 255, calc(var(--topa) * 0.9)); background: radial-gradient(circle, rgba(255, 255, 255, calc(var(--topa) * 0.25)), rgba(43, 22, 48, calc(var(--topa) * 0.4))); pointer-events: none; }
+.t-stick { position: absolute; width: calc(var(--B) * 1.45); height: calc(var(--B) * 1.45); transform: translate(-50%, -50%); border-radius: 50%; border: 3px solid rgba(255, 255, 255, calc(var(--topa) * 0.9)); background: radial-gradient(circle, rgba(255, 255, 255, calc(var(--topa) * 0.25)), rgba(43, 22, 48, calc(var(--topa) * 0.4))); pointer-events: none; }
 .t-stick.hidden { display: none; }
-.t-knob { position: absolute; left: 50%; top: 50%; width: 45%; height: 45%; border-radius: 50%; background: rgba(255, 255, 255, calc(var(--topa) + 0.2)); border: 3px solid var(--ol); transform: translate(-50%, -50%); }
-.t-hint { position: absolute; left: calc(9% + var(--safe-l)); bottom: calc(18% + var(--safe-b)); font-size: 0.85rem; opacity: calc(var(--topa) + 0.1); pointer-events: none; transition: opacity 0.5s; text-shadow: 0 2px 0 var(--ol); }
+.t-knob { position: absolute; left: 50%; top: 50%; width: 46%; height: 46%; border-radius: 50%; background: rgba(255, 255, 255, calc(var(--topa) + 0.2)); border: 3px solid var(--ol); transform: translate(-50%, -50%); }
+.t-hint { position: absolute; left: calc(7% + var(--safe-l)); bottom: calc(var(--B) * 0.9 + var(--safe-b)); font-size: 0.95rem; opacity: calc(var(--topa) + 0.1); pointer-events: none; transition: opacity 0.5s; text-shadow: 0 2px 0 var(--ol); }
 .t-hint.gone { opacity: 0; }
-.t-btn { position: absolute; border-radius: 50%; border: 3px solid rgba(43, 22, 48, 0.9); display: flex; align-items: center; justify-content: center; color: #fff; font-size: calc(1.6rem * var(--tsize)); opacity: var(--topa); transition: transform 0.06s, opacity 0.1s; text-shadow: 0 2px 0 var(--ol); pointer-events: none; }
-.t-btn.down { transform: scale(0.88); opacity: calc(var(--topa) + 0.3); }
-.t-jump { width: calc(5.4rem * var(--tsize)); height: calc(5.4rem * var(--tsize)); right: calc(1.2rem + var(--safe-r)); bottom: calc(1.4rem + var(--safe-b)); background: radial-gradient(circle at 35% 30%, #9fffb8, #2fbf5a); }
-.t-attack { width: calc(4.8rem * var(--tsize)); height: calc(4.8rem * var(--tsize)); right: calc(1.2rem + 6.2rem * var(--tsize) + var(--safe-r)); bottom: calc(1rem + var(--safe-b)); background: radial-gradient(circle at 35% 30%, #ffb0d4, #ff3d8a); }
-.t-special { width: calc(4.2rem * var(--tsize)); height: calc(4.2rem * var(--tsize)); right: calc(1.6rem + 1.4rem * var(--tsize) + var(--safe-r)); bottom: calc(1.6rem + 5.6rem * var(--tsize) + var(--safe-b)); background: radial-gradient(circle at 35% 30%, #fff3a0, #ffb800); }
-.t-special svg { position: absolute; inset: -6px; width: calc(100% + 12px); height: calc(100% + 12px); transform: rotate(-90deg); }
+.t-btn { position: absolute; border-radius: 50%; border: 3px solid rgba(43, 22, 48, 0.9); display: flex; align-items: center; justify-content: center; color: #fff; font-size: calc(var(--B) * 0.36); opacity: var(--topa); transition: transform 0.06s, opacity 0.1s; text-shadow: 0 2px 0 var(--ol); pointer-events: none; box-shadow: 0 4px 0 rgba(43, 22, 48, 0.6); }
+.t-btn.down { transform: scale(0.9); opacity: calc(var(--topa) + 0.3); box-shadow: none; }
+.t-jump { width: calc(var(--B) * 1.05); height: calc(var(--B) * 1.05); right: calc(var(--B) * 0.28 + var(--safe-r)); bottom: calc(var(--B) * 0.42 + var(--safe-b)); background: radial-gradient(circle at 35% 30%, #9fffb8, #2fbf5a); }
+.t-attack { width: calc(var(--B) * 0.98); height: calc(var(--B) * 0.98); right: calc(var(--B) * 1.5 + var(--safe-r)); bottom: calc(var(--B) * 0.14 + var(--safe-b)); background: radial-gradient(circle at 35% 30%, #ffb0d4, #ff3d8a); }
+.t-special { width: calc(var(--B) * 0.78); height: calc(var(--B) * 0.78); right: calc(var(--B) * 1.6 + var(--safe-r)); bottom: calc(var(--B) * 1.32 + var(--safe-b)); background: radial-gradient(circle at 35% 30%, #fff3a0, #ffb800); font-size: calc(var(--B) * 0.3); }
+.t-special svg { position: absolute; inset: -7px; width: calc(100% + 14px); height: calc(100% + 14px); transform: rotate(-90deg); }
 .t-special .cd { fill: none; stroke: #fff; stroke-width: 7; stroke-linecap: round; }
 .t-special.ready { animation: readyPulse 1s ease-in-out infinite; }
 @keyframes readyPulse { 50% { box-shadow: 0 0 1.2rem #ffe14d; } }
 .t-charge { position: absolute; inset: 10%; border-radius: 50%; background: rgba(255, 255, 255, 0.55); transform: scale(0); opacity: 0; pointer-events: none; }
-.t-pause { position: absolute; top: calc(0.5rem + var(--safe-t)); left: 50%; transform: translateX(-50%) translateY(2.6rem); width: 2.3rem; height: 2.3rem; border-radius: 50%; background: rgba(255, 255, 255, 0.75); color: var(--ol); border: 3px solid var(--ol); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 800; opacity: 0.7; pointer-events: none; }
-#touch.lefty .t-jump { right: auto; left: calc(1.2rem + var(--safe-l)); }
-#touch.lefty .t-attack { right: auto; left: calc(1.2rem + 6.2rem * var(--tsize) + var(--safe-l)); }
-#touch.lefty .t-special { right: auto; left: calc(1.6rem + 1.4rem * var(--tsize) + var(--safe-l)); }
-#touch.lefty .t-hint { left: auto; right: calc(9% + var(--safe-r)); }
+.t-pause { position: absolute; top: calc(0.5rem + var(--safe-t)); left: 50%; transform: translateX(-50%) translateY(2.8rem); width: 44px; height: 44px; border-radius: 50%; background: rgba(255, 255, 255, 0.8); color: var(--ol); border: 3px solid var(--ol); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; opacity: 0.75; pointer-events: none; }
+#touch.lefty .t-jump { right: auto; left: calc(var(--B) * 0.28 + var(--safe-l)); }
+#touch.lefty .t-attack { right: auto; left: calc(var(--B) * 1.5 + var(--safe-l)); }
+#touch.lefty .t-special { right: auto; left: calc(var(--B) * 1.6 + var(--safe-l)); }
+#touch.lefty .t-hint { left: auto; right: calc(7% + var(--safe-r)); }
 
 /* ---------------------------------------------------------------- ROTATE */
 #rotate { position: fixed; inset: 0; z-index: 100; background: #2b1630; display: none; flex-direction: column; gap: 1rem; align-items: center; justify-content: center; font-size: 1.3rem; text-align: center; padding: 2rem; }
