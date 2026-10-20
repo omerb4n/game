@@ -107,6 +107,8 @@ class App {
     });
     this.ui.addEventListener('pointerover', (e) => { const el = e.target.closest('[data-nav]'); if (el && !el.disabled && el !== this.lastHover) { this.lastHover = el; sfx('hover'); } });
     window.addEventListener('keydown', () => { if (this.screen === 'lobby') this.kbTouched = true; });
+    // closing / navigating away is a real leave (not a connection blip): tell the others right away
+    window.addEventListener('pagehide', (e) => { if (!e.persisted && this.session.online) this.session.close(); });
     window.addEventListener('contextmenu', (e) => { if (!e.target.closest?.('input')) e.preventDefault(); });
     document.addEventListener('gesturestart', (e) => e.preventDefault());
     window.addEventListener('gamepadconnected', () => { if (this.screen === 'lobby') this.toast('🎮 Gamepad connected — press A to join!'); });

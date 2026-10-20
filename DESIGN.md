@@ -78,6 +78,8 @@ Skill-based games reward players who take on more risk with more precision.
 | **Bonus muffins** | They float in exposed spots and expire. | Progress toward the goal without a kill. |
 
 ### Readability and fairness
+- **Enemies patrol platforms.** At a ledge they pause, look around and usually turn back. They drop down only sometimes, more often when a player is below them. A newly spawned enemy stays on the upper platforms for about 9–14 s, where it used to be about 3 s, so there's time to fight it.
+- **Hits keep enemies in place.** Light hits nudge an enemy and stagger it so you can combo; only heavy hits launch it.
 - Every enemy attack has a **telegraph of at least 0.35 s**: glowing eyes, wind-up shakes, red "!" columns for falling hazards, dashed lines before the wyrm swoops, and target circles before King Gelatino slams.
 - **Silhouettes** are distinct: the heroes are a bun, a macaron, a cinnamon roll, a gummy bear, a chili, and a mochi.
 - Player colors (P1 red, P2 blue, P3 green, P4 gold) appear on tags, HUD cards, and arrows.
@@ -101,11 +103,12 @@ Csikszentmihalyi's *flow* channel means keeping challenge in step with growing s
 | Parameter | Value |
 |---|---|
 | Simulation | Fixed 60 Hz, sub-stepped collision |
-| Jump velocity | 378 u/s, about 4.5 tiles high |
-| Gravity | 980 rising with jump held, 1650 falling or released (asymmetric = snappy) |
-| Apex hang | ×0.55 gravity when \|vy\| < 45 and jump is held |
-| Jump cut | Releasing jump while rising halves vy |
-| Coyote / buffer | 0.10 s / 0.13 s |
+| Jump velocity | 372 u/s: a tap gives about 2 tiles, a full hold about 4.4 tiles |
+| Gravity | 950 rising while held, 2500 after an early release (smooth short hops, no velocity snap), 1350 falling |
+| Apex hang | ×0.5 gravity when \|vy\| < 55 and jump is held |
+| Launches | Springs, pogo, rocket-jumps and held stomp bounces always rise in full |
+| Coyote / buffer | 0.12 s / 0.15 s |
+| Rendering | Interpolated between 60 Hz simulation steps, so 90/120 Hz screens stay smooth |
 | Ground acceleration | 1700 (×1.6 when turning around), ice 420 |
 | Hit-stop | 25 ms on normal hits, 60 ms on heavy hits and crits, 70 ms when you get hit |
 | Invulnerability | 1.1 s after a hit (more with *Thick Crust*) |
@@ -124,6 +127,10 @@ Mobile co-op means every friend is on their own phone. Room codes run over WebRT
   - Player movement is forwarded straight to the other players as well as to the host, which skips one hop.
 - **Update rate and smoothing**: snapshots and player states go out at 30 Hz.
   - The interpolation delay adapts to measured arrival jitter: about 50 ms on a good link, up to 200 ms on a jittery one.
+- **Resilience**: a player is marked "reconnecting" after 3.5 s of silence and only removed after 30 s.
+  - The relay connection has a keep-alive, so a silently dead mobile connection is detected in about 4.5 s and re-established automatically.
+  - Reconnected players are brought back to whatever screen the host is on.
+  - Closing the tab is a real leave and takes effect immediately.
 - **Relay fallback**: a joining client first tries direct WebRTC for 7 s.
   - If that fails, it reaches the host through a public MQTT broker over `wss://`.
   - The host listens on several brokers at once, and the client uses the first one it can reach.

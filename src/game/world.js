@@ -482,7 +482,7 @@ export class World {
       }
       const disabled = e.frozen > 0 || e.stun > 0 || e.kbT > 0;
       if (!disabled) def.ai(e, this, dt);
-      else { e.vx *= def.flying ? 0.9 : 0.94; if (def.flying && e.frozen <= 0) e.vy *= 0.9; }
+      else { e.vx *= def.flying ? 0.9 : e.onGround ? 0.82 : 0.95; if (def.flying && e.frozen <= 0) e.vy *= 0.9; }
       if (!def.flying || e.frozen > 0) e.vy = Math.min(e.vy + 900 * this.gravMul * dt, 420);
       if (def.noclip && e.frozen <= 0) { e.x += e.vx * dt; e.y += e.vy * dt; e.onGround = false; e.hitWall = 0; }
       else this.moveEntity(e, dt);
@@ -635,6 +635,7 @@ export class World {
     if (o.slow) m.sl = o.slow;
     if (o.stun) m.sn = o.stun;
     if (o.tag === 'stomp') m.stomp = 1;
+    if (o.heavy) m.hv = 1;
     // local feedback
     e.flash = 0.12;
     const cx = e.x + e.w / 2, cy = e.y + e.h / 2;
@@ -661,7 +662,10 @@ export class World {
     e.lastHitBy = byId;
     e.flash = 0.12;
     if (!m.burnTick && !e.def.heavy) {
-      if (m.kx || m.ky) { e.vx = m.kx * 0.9; e.vy = Math.min(e.vy, 0) + m.ky * 0.9; e.kbT = 0.14; }
+      // light hits nudge + stagger (enemy stays put long enough to combo); heavy hits launch
+      const k = m.hv ? 0.9 : 0.45;
+      if (m.kx || m.ky) { e.vx = m.kx * k; e.vy = Math.min(e.vy, 0) + m.ky * (m.hv ? 0.9 : 0.6); }
+      e.kbT = Math.max(e.kbT, m.hv ? 0.3 : 0.22);
     }
     if (m.fz) { e.frozen = Math.max(e.frozen, e.def.boss ? m.fz * 0.25 : m.fz); }
     if (m.bn) { e.burn = Math.max(e.burn, m.bn); e.burnBy = byId; }
