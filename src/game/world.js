@@ -249,6 +249,7 @@ export class World {
       this.netTick();
       return;
     }
+    this.storePrev();
     for (const p of this.players) if (p.local && p.ctl) { p.ctl.sample(); if (this.inputBlocked) p.ctl.neutralize(); }
     this.cfg.endSample?.();
     this.time += dt;
@@ -274,6 +275,33 @@ export class World {
     this.fx.update(dt);
     this.ambient(dt);
     this.netTick();
+  }
+
+  // ================================================================= RENDER INTERPOLATION
+  // The simulation runs at a fixed 60 Hz; on 90/120 Hz screens frames fall between steps. Remember
+  // where things were at the start of each step and draw them at the exact in-between position.
+  storePrev() {
+    for (const list of [this.players, this.enemies, this.pproj, this.eproj, this.pickups]) {
+      for (const e of list) { e._px = e.x; e._py = e.y; }
+    }
+  }
+  beginLerp(a) {
+    const out = (this._lerped = []);
+    if (a >= 0.999) return;
+    for (const list of [this.players, this.enemies, this.pproj, this.eproj, this.pickups]) {
+      for (const e of list) {
+        if (e._px === undefined) continue;
+        const dx = e.x - e._px, dy = e.y - e._py;
+        if (Math.abs(dx) > 48 || Math.abs(dy) > 48) continue; // wrapped / teleported: don't smear
+        e._rx = e.x; e._ry = e.y;
+        e.x = e._px + dx * a; e.y = e._py + dy * a;
+        out.push(e);
+      }
+    }
+  }
+  endLerp() {
+    for (const e of this._lerped || []) { e.x = e._rx; e.y = e._ry; }
+    this._lerped = null;
   }
 
   // ================================================================= HOST LOGIC
@@ -886,7 +914,7 @@ export class World {
     this.areaHit(p, b.x, b.y, ex.r, ex.dmg, { burn: ex.burn, slow: ex.slow, kby: -160, heavy: ex.r > 40 });
     if (ex.launch && p.local && !p.down) {
       const d = Math.hypot(p.cx - b.x, p.cy - b.y);
-      if (d < ex.r * 0.9) { p.vy = -440; p.vx += Math.sign(p.cx - b.x) * 120; p.airJumps = p.airJumpsMax; p.jumpCut = true; }
+      if (d < ex.r * 0.9) { p.vy = -440; p.vx += Math.sign(p.cx - b.x) * 120; p.airJumps = p.airJumpsMax; p.launch = true; p.jumpCut = false; }
     }
   }
 
@@ -1033,8 +1061,9 @@ export class World {
   stomp(p, e, shatter) {
     const c = p.ctl;
     const boost = p.mods.stompMul > 1;
-    p.vy = c.jump ? (boost ? -440 : -370) : (boost ? -330 : -250);
-    p.jumpCut = !c.jump;
+    // hold jump for a big bounce, otherwise a small hop
+    p.vy = c.jump ? (boost ? -440 : -370) : (boost ? -380 : -320);
+    p.jumpCut = !c.jump; p.launch = false;
     p.y = e.y - p.h;
     p.airJumps = p.airJumpsMax;
     p.sq = -0.35;
@@ -1056,7 +1085,7 @@ export class World {
     // springs
     const spr = this.tilesUnder(p, T_SPRING);
     if (spr && p.vy >= 0 && p.y + p.h > spr.r * TILE + 6) {
-      p.vy = p.ctl.jump ? -560 : -480; p.jumpCut = true; p.airJumps = p.airJumpsMax; p.sq = -0.4;
+      p.vy = p.ctl.jump ? -540 : -470; p.launch = true; p.jumpCut = false; p.airJumps = p.airJumpsMax; p.sq = -0.4;
       this.fxEvent('spring', spr.c * TILE + 8, (spr.r + 1) * TILE, 0);
     }
     // lava

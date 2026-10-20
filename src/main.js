@@ -138,7 +138,8 @@ class App {
         }
         if (steps >= 4) this.acc = 0;
       }
-      this.renderer.render(w, dt, this);
+      w.beginLerp(Math.min(1, this.acc / DT));
+      try { this.renderer.render(w, dt, this); } finally { w.endLerp(); }
       this.updateTouchHud();
     } else {
       this.menu.update(dt);

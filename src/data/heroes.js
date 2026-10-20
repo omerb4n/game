@@ -227,7 +227,7 @@ const gunner = {
         w.spawnProj(p, { kind: 'pellet', x: p.cx + a.x * 10, y: p.cy - 3 + a.y * 10, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, r: 2.5, life: rand(0.17, 0.23), dmg: 1.3, kb: 70, multiHitGroup: true });
       }
       // recoil = mobility (rocket-jump skill)
-      if (!p.onGround && a.y > 0.5) { p.vy = Math.min(p.vy, -310); p.airJumps = Math.max(p.airJumps, 0); }
+      if (!p.onGround && a.y > 0.5) { p.vy = Math.min(p.vy, -310); p.launch = true; p.jumpCut = false; }
       else if (!p.onGround && a.y < -0.5) p.vy += 160;
       else p.vx -= a.x * (p.onGround ? 110 : 190);
       p.cd.attack = 0.48 / p.mods.atkSpeed;
