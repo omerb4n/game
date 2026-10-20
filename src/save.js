@@ -20,6 +20,7 @@ const defaults = () => ({
     difficulty: 'normal', // casual | normal | hard
     unlockAll: false,
     reduceFlashes: false,
+    autoFullscreen: true,
   },
   levels: {}, // '1-1': {stars, score, time, stars bits}
   worldsCleared: [],

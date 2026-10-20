@@ -232,20 +232,22 @@ class TouchControls {
     this.stickEl?.classList.add('hidden');
     for (const b in this.buttons) { this.buttons[b].pressed = false; this.buttons[b].ids.clear(); this.buttons[b].el.classList.remove('down'); }
   }
+  // Nearest button wins; the action buttons have generous invisible hit areas so slightly
+  // off-centre thumbs still register. Pause keeps a tight hit area to avoid accidental pauses.
   btnAt(x, y) {
     let best = null, bd = 1e9;
     for (const name in this.buttons) {
       const r = this.buttons[name].el.getBoundingClientRect();
       const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      const rad = r.width / 2 * 1.25;
+      const rad = (r.width / 2) * (name === 'pause' ? 1.15 : 1.45);
       const d = Math.hypot(x - cx, y - cy);
-      if (d < rad && d < bd) { bd = d; best = name; }
+      if (d < rad && d / rad < bd) { bd = d / rad; best = name; }
     }
     return best;
   }
   isStickSide(x) {
     const lefty = settings().leftHanded;
-    return lefty ? x > window.innerWidth * 0.55 : x < window.innerWidth * 0.45;
+    return lefty ? x > window.innerWidth * 0.5 : x < window.innerWidth * 0.5;
   }
   onStart(e) {
     e.preventDefault();
@@ -274,7 +276,7 @@ class TouchControls {
     e.preventDefault();
     for (const t of e.changedTouches) {
       if (t.identifier === this.stick.id) {
-        const R = 46 * settings().touchSize;
+        const R = Math.min(Math.max(64, window.innerHeight * 0.26), 130) * settings().touchSize * 0.6;
         let dx = t.clientX - this.stick.ox, dy = t.clientY - this.stick.oy;
         const d = Math.hypot(dx, dy);
         if (d > R) {
