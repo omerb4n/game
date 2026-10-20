@@ -119,7 +119,7 @@ Csikszentmihalyi's *flow* channel means keeping challenge in step with growing s
 | Launches | Springs, pogo, rocket-jumps and held stomp bounces always rise in full |
 | Coyote / buffer | 0.12 s / 0.15 s |
 | Rendering | Interpolated between 60 Hz simulation steps, so 90/120 Hz screens stay smooth |
-| Camera | 1.35× zoom by default (adjustable 1–1.7×) that follows this device's hero(es); it zooms out to frame every local player, shows the whole arena during the intro, and puts edge arrows on off-screen enemies, teammates and the Golden Muffin |
+| Camera | 1.35× zoom by default (adjustable 1–1.7×) that follows this device's hero(es); it zooms out to frame every local player, shows the whole arena during the intro, and puts edge arrows on off-screen enemies, teammates and the Golden Muffin. Motion uses critically damped springs, an eased look-ahead in the running direction, and a vertical floor lock so small hops don't bob the view. On arenas that wrap, the camera keeps panning past the edge and the arena is drawn tiled, so running off one side is one continuous pan |
 | Ground acceleration | 1700 (×1.6 when turning around), ice 420 |
 | Hit-stop | 25 ms on normal hits, 60 ms on heavy hits and crits, 70 ms when you get hit |
 | Invulnerability | 1.1 s after a hit (more with *Thick Crust*) |
