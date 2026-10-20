@@ -1364,6 +1364,7 @@ export class World {
   }
   onSnap(m) {
     const now = performance.now();
+    this.lastSnapAt = now;
     this.snaps.push({ rt: now, m });
     if (this.snaps.length > 12) this.snaps.shift();
     // meta

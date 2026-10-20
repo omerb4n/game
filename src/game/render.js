@@ -537,6 +537,11 @@ export class Renderer {
     for (const p of world.players) {
       if (!p.present) continue;
       const x = p.cx, y = p.y - (p.down ? 26 : 22);
+      if (p.netStale) {
+        ctx.font = `800 7px ${FONT}`; ctx.textAlign = 'center';
+        ctx.lineWidth = 2; ctx.strokeStyle = OL; ctx.fillStyle = '#ffe14d';
+        ctx.strokeText('📶 …', x, y - 11); ctx.fillText('📶 …', x, y - 11);
+      }
       if (multi && !p.down) {
         ctx.fillStyle = p.color; ctx.strokeStyle = OL; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x - 3.5, y - 1); ctx.lineTo(x + 3.5, y - 1); ctx.lineTo(x, y + 3); ctx.closePath(); ctx.fill(); ctx.stroke();
@@ -939,7 +944,18 @@ export class Renderer {
       }
       ctx.restore();
     }
-    // paused online note
+    // connection notice (client waiting / reconnecting)
+    if (world.netNotice && world.netNotice !== 'stale') {
+      ctx.save();
+      ctx.textAlign = 'center';
+      const y = ch * 0.5;
+      ctx.fillStyle = 'rgba(30,12,40,0.75)';
+      const w = 200 * hs, h = 26 * hs;
+      rrect(ctx, cw / 2 - w / 2, y - h / 2, w, h, 12 * hs); ctx.fill();
+      ctx.font = `800 ${9 * hs}px ${FONT}`; ctx.fillStyle = '#fff';
+      ctx.fillText(`📶 ${world.netNotice}`, cw / 2, y + 1 * hs);
+      ctx.restore();
+    }
     ctx.restore();
   }
 }

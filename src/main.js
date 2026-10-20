@@ -127,6 +127,7 @@ class App {
     if (this.world && (this.screen === 'game' || this.screen === 'pause' || this.overlayOverGame)) {
       const w = this.world;
       w.inputBlocked = this.screen !== 'game';
+      w.netNotice = this.netNotice(w);
       if (this.screen === 'game' || this.session.online) {
         this.acc += dt;
         let steps = 0;
@@ -150,6 +151,14 @@ class App {
       ctx.fillText(`${this.fps} fps`, 8, this.renderer.view.ch - 8);
     }
     requestAnimationFrame((t) => this.frame(t));
+  }
+  netNotice(w) {
+    const s = this.session;
+    if (s.role !== 'client') return w.players.some((p) => p.netStale && p.present) ? 'stale' : '';
+    if (this.netLink === 'reconnecting') return 'Reconnecting…';
+    if (this.netLink === 'host-lost') return 'Host lost connection — waiting…';
+    if (w.lastSnapAt && performance.now() - w.lastSnapAt > 1500) return 'Waiting for the host…';
+    return '';
   }
   checkPauseInput() {
     if (this.screen !== 'game') return;
@@ -712,6 +721,27 @@ class App {
       const r = this.roster.find((x) => x.id === m.id && x.peer === from);
       if (r && !this.perkDone.has(r.id)) { r.perks = [...(r.perks || []), m.perk]; this.perkDone.add(r.id); this.afterPerkPick(); }
     });
+    // a player's connection went quiet / came back: show it, but keep them in the game
+    s.onPeerStale = (peer, stale) => {
+      const r = this.roster.find((x) => x.peer === peer);
+      if (this.world) for (const p of this.world.players) if (p.peer === peer) p.netStale = stale;
+      if (r && stale) this.toast(`${esc(r.name)} lost connection — waiting…`, '📶');
+      if (r && !stale) this.toast(`${esc(r.name)} is back!`, '📶');
+    };
+    // a reconnected player tells us what they're looking at; bring them up to date
+    s.on('resync', (m, from) => {
+      const send = (msg) => s.sendTo(from, { type: 'goto', ...msg });
+      if (this.screen === 'lobby') this.syncLobby();
+      else if (this.screen === 'worldmap') send({ screen: 'worldmap', sel: this.mapSel });
+      else if ((this.screen === 'game' || this.overlayOverGame || this.screen === 'pause') && this.lastGameGoto) {
+        if (m.screen !== 'game' || m.level !== this.world?.level.id) send(this.lastGameGoto);
+      } else if (this.screen === 'results' && this.lastResult) {
+        if (m.screen !== 'results') send({ screen: 'results', result: this.lastResult });
+      } else if (this.screen === 'perks') {
+        if (m.screen !== 'perks') send({ screen: 'perks', run: this.run, roster: this.roster });
+        s.sendTo(from, { type: 'perkState', done: [...this.perkDone] });
+      }
+    });
     s.onPeerLeave = (peer) => {
       const r = this.roster.find((x) => x.peer === peer);
       this.roster = this.roster.filter((x) => x.peer !== peer);
@@ -734,6 +764,15 @@ class App {
     s.on('busy', () => { this.netMsg('That room is mid-game. Ask the host to return to the lobby.', true); s.close(); this.session = localSession(); });
     s.on('goto', (m) => this.onGoto(m));
     s.on('perkState', (m) => { this.perkDone = new Set(m.done); if (this.screen === 'perks') this.renderPerkStatus(); });
+    // connection status (Cloudflare relay): reconnect quietly, then catch up with the host
+    s.onLink = (state) => {
+      this.netLink = state;
+      if (state === 'reconnecting') this.toast('Connection lost — reconnecting…', '📶');
+    };
+    s.onReconnect = () => {
+      this.toast('Reconnected!', '📶');
+      s.send({ type: 'resync', screen: this.screen === 'pause' ? 'game' : this.screen, level: this.world?.level.id || null });
+    };
     s.onDisconnect = (why) => {
       this.world = null;
       this.session = localSession();
@@ -750,7 +789,7 @@ class App {
       case 'perks': this.run = m.run; this.roster = m.roster; this.goPerks(true); break;
       case 'results':
         // clients normally build their own results from the level-end event; this is a fallback
-        if (performance.now() - (this.lastLevelEndAt || 0) > 4000) this.showResults(m.result, true);
+        if (performance.now() - (this.lastLevelEndAt || 0) > 4000 && this.screen !== 'results') { this.world = null; this.showResults(m.result, true); }
         break;
     }
   }
@@ -841,7 +880,8 @@ class App {
   startStage() {
     if (this.session.role === 'client') return;
     const spec = this.stageSpec();
-    this.hostBroadcastGoto({ screen: 'game', spec, roster: this.roster, diff: this.run.diff, run: this.run });
+    this.lastGameGoto = { screen: 'game', spec, roster: this.roster, diff: this.run.diff, run: this.run };
+    this.hostBroadcastGoto(this.lastGameGoto);
     this.enterGame(spec, this.run.diff);
   }
   levelFromSpec(spec) {
