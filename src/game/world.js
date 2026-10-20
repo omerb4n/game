@@ -1108,6 +1108,7 @@ export class World {
           if (canStomp) this.stomp(p, e, true);
           continue; // frozen enemies are harmless
         }
+        if (e.harmless) { if (canStomp) this.stomp(p, e, false); continue; } // e.g. a dazed boss
         if (canStomp && (stompDef === 'yes' || stompDef === 'bounce')) {
           this.stomp(p, e, false);
         } else if (p.invuln <= 0 && p.dashT <= 0) {
@@ -1126,7 +1127,7 @@ export class World {
     p.y = e.y - p.h;
     p.airJumps = p.airJumpsMax;
     p.sq = -0.35;
-    const dmg = shatter ? 10 : (e.def.boss ? 3 : 3) * p.mods.stompMul;
+    const dmg = shatter ? 10 : (e.def.stompDmg || 3) * p.mods.stompMul;
     if (!e.armored) this.hitEnemy(p, e, dmg, { stun: 0.6, kby: 60, tag: 'stomp', heavy: shatter });
     else { sfx('shield'); }
     this.fx.ring(p.cx, p.y + p.h, 12, '#ffffff', 0.25, 2);
@@ -1438,7 +1439,7 @@ export class World {
         e: this.enemies.map((e) => ({
           i: e.id, t: e.type, x: round1(e.x), y: round1(e.y), vx: Math.round(e.vx), vy: Math.round(e.vy), f: e.facing, s: e.state,
           h: Math.ceil(e.hp), m: e.maxHp,
-          b: (e.frozen > 0 ? 1 : 0) | (e.burn > 0 ? 2 : 0) | (e.mark > 0 ? 4 : 0) | (e.enraged ? 8 : 0) | (e.armored ? 16 : 0) | (e.stun > 0 ? 32 : 0) | (e.slow > 0 ? 64 : 0) | (e.phased ? 128 : 0) | (e.vuln ? 256 : 0) | (e.spawning > 0 ? 512 : 0),
+          b: (e.frozen > 0 ? 1 : 0) | (e.burn > 0 ? 2 : 0) | (e.mark > 0 ? 4 : 0) | (e.enraged ? 8 : 0) | (e.armored ? 16 : 0) | (e.stun > 0 ? 32 : 0) | (e.slow > 0 ? 64 : 0) | (e.phased ? 128 : 0) | (e.vuln ? 256 : 0) | (e.spawning > 0 ? 512 : 0) | (e.harmless ? 1024 : 0),
           ph: e.data?.phase,
         })),
         k: this.pickups.map((k) => ({ i: k.id, k: k.kind, x: round1(k.x), y: round1(k.y), b: k.bonus ? 1 : 0, l: k.life !== undefined ? round1(k.life) : -1 })),
@@ -1483,7 +1484,7 @@ export class World {
       if (e.state !== d.s) { e.state = d.s; e.st = 0; }
       e.facing = d.f; e.vx = d.vx; e.vy = d.vy;
       e.frozen = d.b & 1 ? 1 : 0; e.burn = d.b & 2 ? 1 : 0; e.mark = d.b & 4 ? 1 : 0; e.enraged = !!(d.b & 8);
-      e.armored = !!(d.b & 16); e.stun = d.b & 32 ? 1 : 0; e.slow = d.b & 64 ? 1 : 0; e.phased = !!(d.b & 128); e.vuln = !!(d.b & 256); e.spawning = d.b & 512 ? 0.2 : 0;
+      e.armored = !!(d.b & 16); e.stun = d.b & 32 ? 1 : 0; e.slow = d.b & 64 ? 1 : 0; e.phased = !!(d.b & 128); e.vuln = !!(d.b & 256); e.spawning = d.b & 512 ? 0.2 : 0; e.harmless = !!(d.b & 1024);
       if (d.ph) e.data.phase = d.ph;
       e.buf.push({ t: now, x: d.x, y: d.y });
       if (e.buf.length > 10) e.buf.shift();

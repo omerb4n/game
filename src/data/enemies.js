@@ -525,14 +525,16 @@ function bossPhase(e) { return e.hp / e.maxHp; }
 
 export const BOSSES = {
   jellyking: {
-    name: 'King Gelatino', title: 'The Wobbling Monarch', w: 44, h: 36, hp: 180, speed: 80, score: 1000, stomp: 'bounce', heavy: true, boss: true, crumbs: ['#ff5a9e', '#ffb3d6', '#ffd34d'],
+    name: 'King Gelatino', title: 'The Wobbling Monarch', w: 44, h: 36, hp: 180, speed: 80, score: 1000, stomp: 'bounce', stompDmg: 6, heavy: true, boss: true, crumbs: ['#ff5a9e', '#ffb3d6', '#ffd34d'],
     ai(e, w, dt) {
       const p = w.nearestPlayer(e.x, e.y);
       const hpF = bossPhase(e);
       const rage = hpF < 0.34;
       e.data.sum1 = e.data.sum1 || false;
-      if (!e.data.sum1 && hpF < 0.66) { e.data.sum1 = true; setState(e, 'summon'); }
-      if (!e.data.sum2 && hpF < 0.33) { e.data.sum2 = true; setState(e, 'summon'); }
+      e.vuln = e.state === 'dazed';
+      e.harmless = e.state === 'dazed';
+      if (e.state !== 'dazed' && !e.data.sum1 && hpF < 0.66) { e.data.sum1 = true; setState(e, 'summon'); }
+      if (e.state !== 'dazed' && !e.data.sum2 && hpF < 0.33) { e.data.sum2 = true; setState(e, 'summon'); }
       switch (e.state) {
         case 'intro': case 'walk':
           if (e.st > 1.6) setState(e, 'idle');
@@ -550,11 +552,11 @@ export const BOSSES = {
               e.data.air = false;
               w.shockwave(e, e.x + e.w / 2, e.y + e.h, rage ? 140 : 115);
               e.data.hops--;
-              if (e.data.hops <= 0) { setState(e, 'idle'); break; }
+              if (e.data.hops <= 0) { setState(e, 'dazed'); e.data.dazeFor = rage ? 0.9 : 1.2; e.vx = 0; break; }
             }
-            if (e.st > 0.25) {
+            if (e.st > (rage ? 0.45 : 0.7)) {
               faceToward(e, p);
-              e.vy = -330; e.vx = e.facing * (rage ? 120 : 90);
+              e.vy = -270; e.vx = e.facing * (rage ? 80 : 60);
               e.data.air = true; e.st = 0;
             }
           }
@@ -566,15 +568,21 @@ export const BOSSES = {
             w.fxEvent('target', e.data.tx + e.w / 2, w.groundBelow(e.data.tx + e.w / 2, e.y + e.h), 0.6);
           }
           if (e.data.hang && !e.onGround) {
-            if (e.st < 1.2) { e.vy = Math.min(e.vy, 0) - 0; e.vy = 0; e.x += (e.data.tx - e.x) * dt * 6; }
-            else e.vy = 620;
+            if (e.st < 1.3) { e.vy = 0; e.x += clamp((e.data.tx - e.x) * dt * 3, -150 * dt, 150 * dt); }
+            else e.vy = 560;
           }
           if (e.onGround && e.data.hang) {
             e.data.hang = false; e.data.air = false;
             w.shockwave(e, e.x + e.w / 2, e.y + e.h, 160, true);
             for (let i = 0; i < (rage ? 4 : 2); i++) w.enemyShoot(e, { kind: 'jelly', x: e.x + e.w / 2, y: e.y + 6, vx: rand(-160, 160), vy: rand(-380, -240), g: 500, r: 4, life: 3 });
-            setState(e, 'idle');
+            e.vx = 0;
+            setState(e, 'dazed'); e.data.dazeFor = rage ? 1.6 : 2.2;
           }
+          break;
+        case 'dazed':
+          // splatted after landing: flattened, harmless to touch and takes double damage
+          e.vx *= 0.8;
+          if (e.st > (e.data.dazeFor || 1.5)) setState(e, 'idle');
           break;
         case 'summon':
           e.vx = 0;
@@ -590,7 +598,14 @@ export const BOSSES = {
     },
     draw(ctx, e, t) {
       ctx.save(); ctx.translate(e.x + e.w / 2, e.y + e.h);
-      const sq = clamp(-e.vy / 900, -0.2, 0.25) + Math.sin(t * 5) * 0.03;
+      const dazed = e.state === 'dazed';
+      if (dazed) {
+        // stars + label first (unscaled), then draw the body squashed flat
+        for (let i = 0; i < 4; i++) { const a = t * 5 + (i * TAU) / 4; ctx.fillStyle = '#fff36b'; star(ctx, Math.cos(a) * 20, -34 + Math.sin(a) * 4, 3.2, 1.4); ctx.fill(); }
+        ctx.font = 'bold 9px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = OL;
+        ctx.strokeText('HIT HIM!', 0, -44 - Math.sin(t * 8) * 2); ctx.fillStyle = '#fff'; ctx.fillText('HIT HIM!', 0, -44 - Math.sin(t * 8) * 2);
+      }
+      const sq = dazed ? -0.32 + Math.sin(t * 9) * 0.04 : clamp(-e.vy / 900, -0.2, 0.25) + Math.sin(t * 5) * 0.03;
       ctx.scale(1 - sq * 0.7, 1 + sq);
       ctx.strokeStyle = OL; ctx.lineWidth = 2;
       const g = ctx.createRadialGradient(-8, -28, 4, 0, -16, 34);
