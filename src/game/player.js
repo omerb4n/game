@@ -5,9 +5,11 @@ import { clamp, approach, W, H, rand, TAU, round1 } from '../util.js';
 import { sfx } from '../audio.js';
 import { settings } from '../save.js';
 
-const GRAV_UP = 980, GRAV_DOWN = 1650, MAX_FALL = 430, FAST_FALL = 560;
-const JUMP_V = 378, AIR_JUMP_V = 335;
-const COYOTE = 0.1, BUFFER = 0.13;
+// Jump arc: gentle rise while jump is held, stronger gravity after an early release (smooth short
+// hops instead of an abrupt velocity cut), a soft apex, and a moderate fall.
+const GRAV_UP = 950, GRAV_CUT = 2500, GRAV_DOWN = 1350, MAX_FALL = 410, FAST_FALL = 540;
+const JUMP_V = 372, AIR_JUMP_V = 335;
+const COYOTE = 0.12, BUFFER = 0.15;
 const REVIVE_TIME = 1.4;
 
 export class Player {
@@ -151,7 +153,7 @@ export class Player {
     if (c.jumpP) this.jumpBuf = BUFFER;
     else this.jumpBuf -= dt;
     this.coyote = this.onGround ? COYOTE : this.coyote - dt;
-    if (this.onGround) { this.airJumps = this.airJumpsMax; this.jumpCut = false; }
+    if (this.onGround) { this.airJumps = this.airJumpsMax; this.jumpCut = false; this.launch = false; }
 
     // wall slide (ninja)
     this.wallDir = 0;
@@ -178,12 +180,17 @@ export class Player {
       }
     }
     // variable jump height
-    if (!c.jump && this.vy < -60 && !this.jumpCut) { this.vy *= 0.5; this.jumpCut = true; }
+    // variable jump height: letting go early switches to the stronger "cut" gravity (no velocity snap)
+    if (!c.jump && this.vy < 0 && !this.launch) this.jumpCut = true;
+    if (this.vy >= 0) this.launch = false;
 
     // gravity with apex hang + fast fall
     if (this.dashT <= 0) {
-      let g = (this.vy < 0 && c.jump ? GRAV_UP : GRAV_DOWN) * w.gravMul;
-      if (Math.abs(this.vy) < 45 && c.jump) g *= 0.55;
+      let g;
+      if (this.vy < 0) g = this.launch || !this.jumpCut ? GRAV_UP : GRAV_CUT;
+      else g = GRAV_DOWN;
+      if (Math.abs(this.vy) < 55 && (c.jump || this.launch)) g *= 0.5; // soft apex
+      g *= w.gravMul;
       let maxFall = MAX_FALL;
       if (c.y > 0.5 && !this.onGround) { maxFall = FAST_FALL; g *= 1.15; }
       this.vy = Math.min(this.vy + g * dt, maxFall);
@@ -215,7 +222,7 @@ export class Player {
       const r = { x: this.x + hb.ox, y: this.y + hb.oy, w: hb.w, h: hb.h };
       const hits = w.meleeCheck(this, r, hb.dmg, hb.o, hb.hit);
       if (hits > 0 && hb.o.pogo) {
-        this.vy = -330; this.airJumps = this.airJumpsMax; this.jumpCut = true;
+        this.vy = -330; this.airJumps = this.airJumpsMax; this.launch = true; this.jumpCut = false;
         hb.o.pogo = false;
         w.stat(this, 'pogos');
       }

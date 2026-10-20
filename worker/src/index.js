@@ -10,11 +10,15 @@
 //   host   -> relay : {t: '*', d: msg}         forwarded to every client
 //   relay  -> host  : {f: id, d: {type: '__hello'}} / {type: '__bye'} when clients join / leave
 //   relay  -> client: {type: '__welcome'} on join, {type: '__nohost'} if the room does not exist,
-//                     {type: '__hostleft'} if the host leaves
+//                     {type: '__hostleft'} if the host leaves, {type: '__hostlost'} / '__hostback' when the
+//                     host's connection drops and returns
+//   relay  -> host  : {f: id, d: {type: '__lost'}} when a client's connection drops without leaving
 
 export class Room {
   constructor(state) {
     this.state = state;
+    // keep-alive: answered by the runtime without waking the object
+    this.state.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
   }
 
   async fetch(request) {
@@ -26,10 +30,25 @@ export class Room {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     if (role === 'host') {
-      for (const old of this.state.getWebSockets('host')) { try { old.close(4000, 'replaced'); } catch (e) { /* gone */ } }
+      for (const old of this.state.getWebSockets('host')) {
+        old.serializeAttachment({ role: 'replaced', id: 'host' });
+        try { old.close(4000, 'replaced'); } catch (e) { /* gone */ }
+      }
       this.state.acceptWebSocket(server, ['host']);
       server.serializeAttachment({ role, id });
+      // host (re)connected: re-announce every player still here so nobody has to rejoin
+      for (const c of this.state.getWebSockets('client')) {
+        const a = c.deserializeAttachment() || {};
+        if (a.role !== 'client') continue;
+        server.send(JSON.stringify({ f: a.id, d: { type: '__hello' } }));
+        try { c.send(JSON.stringify({ type: '__hostback' })); } catch (e) { /* gone */ }
+      }
     } else {
+      // same player reconnecting: retire their old socket quietly
+      for (const old of this.state.getWebSockets('c:' + id)) {
+        old.serializeAttachment({ role: 'replaced', id });
+        try { old.close(4002, 'replaced'); } catch (e) { /* gone */ }
+      }
       this.state.acceptWebSocket(server, ['client', 'c:' + id]);
       server.serializeAttachment({ role, id });
       const host = this.state.getWebSockets('host')[0];
@@ -49,6 +68,7 @@ export class Room {
     const me = ws.deserializeAttachment() || {};
     let m;
     try { m = JSON.parse(raw); } catch (e) { return; }
+    if (me.role === 'replaced') return;
     if (me.role === 'host') {
       const out = JSON.stringify(m.d);
       const targets = m.t === '*' ? this.state.getWebSockets('client') : this.state.getWebSockets('c:' + m.t);
@@ -63,18 +83,25 @@ export class Room {
     }
   }
 
-  webSocketClose(ws) { this.left(ws); }
-  webSocketError(ws) { this.left(ws); }
+  // code 1000 = the player chose to leave; anything else = connection lost (they may come back)
+  webSocketClose(ws, code, reason) {
+    try { ws.close(code === 1005 || code === 1006 ? 1000 : code, reason || ''); } catch (e) { /* already closed */ }
+    this.left(ws, code === 1000);
+  }
+  webSocketError(ws) { this.left(ws, false); }
 
-  left(ws) {
+  left(ws, clean) {
     const me = ws.deserializeAttachment() || {};
     if (me.role === 'host') {
       for (const s of this.state.getWebSockets('client')) {
-        try { s.send(JSON.stringify({ type: '__hostleft' })); s.close(4001, 'host left'); } catch (e) { /* gone */ }
+        try {
+          if (clean) { s.send(JSON.stringify({ type: '__hostleft' })); s.close(4001, 'host left'); }
+          else s.send(JSON.stringify({ type: '__hostlost' }));
+        } catch (e) { /* gone */ }
       }
-    } else {
+    } else if (me.role === 'client') {
       const host = this.state.getWebSockets('host')[0];
-      if (host) { try { host.send(JSON.stringify({ f: me.id, d: { type: '__bye' } })); } catch (e) { /* gone */ } }
+      if (host) { try { host.send(JSON.stringify({ f: me.id, d: { type: clean ? '__bye' : '__lost' } })); } catch (e) { /* gone */ } }
     }
   }
 }

@@ -10,13 +10,31 @@ function ballistic(sx, sy, tx, ty, T, g) {
   const dx = wrapDx(sx, tx);
   return { vx: dx / T, vy: (ty - sy) / T - 0.5 * g * T };
 }
-function walker(e, w, dt, { ledgeTurn = false, mul = 1 } = {}) {
-  e.vx = e.facing * spd(e) * mul;
+// Ground movement. At a ledge, walkers either turn ('turn') or patrol ('patrol'): pause, look
+// around, and usually turn back — only sometimes dropping down (more often to chase a player below),
+// so enemies stay on platforms long enough to be fought.
+function walker(e, w, dt, { ledgeTurn = false, patrol = false, mul = 1 } = {}) {
   if (e.hitWall) e.facing = -e.facing;
-  if (ledgeTurn && e.onGround) {
+  if ((ledgeTurn || patrol) && e.onGround) {
     const fx = e.facing > 0 ? e.x + e.w + 2 : e.x - 2;
-    if (!w.solidAt(fx, e.y + e.h + 4) && !w.platformAt(fx, e.y + e.h + 4)) e.facing = -e.facing;
+    const ledge = !w.solidAt(fx, e.y + e.h + 4) && !w.platformAt(fx, e.y + e.h + 4);
+    if (!ledge) e.data.edge = null;
+    else if (ledgeTurn) e.facing = -e.facing;
+    else {
+      if (!e.data.edge) {
+        const p = w.nearestPlayer(e.x, e.y);
+        const below = p && p.y > e.y + 24 && Math.abs(wrapDx(e.x, p.x)) < 120;
+        e.data.edge = { t: rand(0.45, 0.9) * (e.enraged ? 0.5 : 1), drop: below ? chance(e.enraged ? 0.85 : 0.6) : chance(e.enraged ? 0.45 : 0.28) };
+      }
+      if (!e.data.edge.drop) {
+        e.vx = 0;
+        e.data.edge.t -= dt;
+        if (e.data.edge.t <= 0) { e.facing = -e.facing; e.data.edge = null; }
+        return;
+      }
+    }
   }
+  e.vx = e.facing * spd(e) * mul;
 }
 
 function eyes(ctx, x, y, f, sep = 3, r = 2.2, angry = false, color = '#fff', pupil = OL) {
@@ -39,11 +57,11 @@ function eyes(ctx, x, y, f, sep = 3, r = 2.2, angry = false, color = '#fff', pup
 // ---------------------------------------------------------------- ENEMIES
 export const ENEMIES = {
   gumdrop: {
-    name: 'Gumdrop', w: 14, h: 12, hp: 4, speed: 38, score: 10, stomp: 'yes', crumbs: ['#ff5a7a', '#ffd0dc'],
+    name: 'Gumdrop', w: 14, h: 12, hp: 4, speed: 32, score: 10, stomp: 'yes', crumbs: ['#ff5a7a', '#ffd0dc'],
     ai(e, w, dt) {
-      walker(e, w, dt);
+      walker(e, w, dt, { patrol: true });
       e.data.hop = (e.data.hop ?? rand(1, 3)) - dt;
-      if (e.onGround && e.data.hop <= 0) {
+      if (e.onGround && e.data.hop <= 0 && !e.data.edge) {
         e.vy = e.enraged ? -260 : -200;
         e.data.hop = rand(1.2, 3) * (e.enraged ? 0.6 : 1);
       }
@@ -72,9 +90,9 @@ export const ENEMIES = {
         if (e.st > 0.55) setState(e, 'fly');
       } else if (e.state === 'prep') {
         e.vx *= 0.85; e.vy *= 0.85;
-        if (e.st > 0.35 && p) {
+        if (e.st > 0.5 && p) {
           const dx = wrapDx(e.x, p.x), dy = p.y - e.y, d = Math.hypot(dx, dy) || 1;
-          const s = spd(e) * 2.8;
+          const s = spd(e) * 2.6;
           e.vx = (dx / d) * s; e.vy = (dy / d) * s;
           setState(e, 'swoop');
         }
