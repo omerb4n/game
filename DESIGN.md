@@ -119,6 +119,11 @@ Mobile co-op means every friend is on their own phone. Room codes run over WebRT
 - **Deterministic projectiles**: the host sends each enemy shot once as a spawn event. Each client then simulates it locally, so dodging is judged against what you actually saw.
 - Clients relay cosmetic events (shots, zones, effects) through the host.
 - Disconnects are handled without crashing the game.
+- **Cloudflare room relay (preferred)**: a Worker + Durable Object per room, created at the Cloudflare data centre nearest the host.
+  - Clients connect to it over a WebSocket.
+  - Player movement is forwarded straight to the other players as well as to the host, which skips one hop.
+- **Update rate and smoothing**: snapshots and player states go out at 30 Hz.
+  - The interpolation delay adapts to measured arrival jitter: about 50 ms on a good link, up to 200 ms on a jittery one.
 - **Relay fallback**: a joining client first tries direct WebRTC for 7 s.
   - If that fails, it reaches the host through a public MQTT broker over `wss://`.
   - The host listens on several brokers at once, and the client uses the first one it can reach.

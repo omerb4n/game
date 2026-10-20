@@ -219,6 +219,7 @@ class App {
   // =============================================================== RENDER HELPERS
   show(name, html, cls = '') {
     this.clearPortraits();
+    clearInterval(this.pingTimer);
     if (name === 'results' || name === 'perks') this.navLockUntil = performance.now() + 900;
     this.screen = name;
     this.ui.className = `ui-${name}`;
@@ -494,6 +495,7 @@ class App {
         const mine = mineIdx >= 0;
         const slot = mine ? this.localSlots[mineIdx] : null;
         const dev = slot ? slot.ctl.label : online ? '🌐 Online' : '';
+        const showPing = online && ((isClient && mine) || (!isClient && !mine));
         cards.push(`
           <div class="pcard" style="--pc:${PLAYER_COLORS[i]}">
             <div class="pc-top"><span class="pc-tag">${esc(r.name)}</span><span class="pc-dev">${esc(dev)}</span>
@@ -503,6 +505,7 @@ class App {
             <div class="pc-name">${esc(h.name)}</div>
             <div class="pc-role">${esc(h.role)} · ${'❤'.repeat(h.hp)}</div>
             <div class="pc-special">★ ${esc(h.special)}</div>
+            ${showPing ? `<div class="pc-ping" data-ping-peer="${esc(r.peer)}">📶 …</div>` : ''}
             ${mine ? `<div class="pc-arrows">
               <button class="btn sm" data-nav data-act="hero" data-slot="${mineIdx}" data-dir="-1">◀</button>
               <button class="btn sm hatbtn" data-nav data-act="hat" data-slot="${mineIdx}" data-dir="1" title="Change hat">🎩</button>
@@ -543,6 +546,18 @@ class App {
       </div>
     `);
     if (online && !isClient) this.renderQR(shareUrl);
+    if (online) { this.updatePings(); this.pingTimer = setInterval(() => this.updatePings(), 1000); }
+  }
+  updatePings() {
+    const label = { cloudflare: 'fast relay', direct: 'direct', relay: 'backup relay' };
+    for (const el of $$('[data-ping-peer]', this.ui)) {
+      let rtt = 0, via = '';
+      if (this.session.role === 'client') { rtt = this.session.stats.rtt; via = this.session.transport || 'direct'; }
+      else { const i = this.session.peerInfo(el.dataset.pingPeer); if (!i) continue; rtt = i.rtt; via = i.via; }
+      const q = !rtt ? '' : rtt < 90 ? 'good' : rtt < 180 ? 'ok' : 'bad';
+      el.className = `pc-ping ${q}`;
+      el.textContent = `📶 ${rtt ? Math.round(rtt) + ' ms' : '…'}${via ? ' · ' + (label[via] || via) : ''}`;
+    }
   }
   controlsHelp() {
     if (isTouchDevice()) return '🕹 Left thumb: move · Right: <b>Jump</b>, <b>Attack</b> (hold to charge), <b>★ Special</b>';

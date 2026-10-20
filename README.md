@@ -15,6 +15,8 @@ Open `index.html` through any static web server (see below). On a phone, add it 
 3. Pick heroes, choose a mode, and tap **Let's Bake!**
 
 Friends can be anywhere: different Wi-Fi networks or mobile data.
+When the optional **Cloudflare relay** is set up (see below), games run through a small room server at the nearest Cloudflare data centre. That's the fastest and most reliable path.
+Otherwise:
 The game first tries a direct peer-to-peer WebRTC link (via the free PeerJS matchmaking server).
 If the network blocks that, as some mobile carriers and strict routers do, it switches automatically to a relay.
 The relay sends game messages through a public MQTT broker over secure WebSockets.
@@ -84,6 +86,18 @@ npx http-server -p 8080 .
 For testing online play on one machine, open two tabs with `?net=bc`. This uses a BroadcastChannel transport instead of WebRTC.
 Add `&lag=150` to simulate 150 ms of network latency with jitter.
 `?relay=wss://your-broker/mqtt` overrides the relay brokers (comma-separated list).
+
+## Cloudflare relay (recommended for online play)
+`worker/` is a tiny Cloudflare Worker + Durable Object that relays a room's messages. The deploy workflow publishes it and points the game at it automatically.
+1. In Cloudflare, open **Workers & Pages** once, so your account has a `workers.dev` subdomain.
+2. Create an API token: **My Profile → API Tokens → Create Token → "Edit Cloudflare Workers"** template.
+3. Copy your **Account ID** from the Workers & Pages overview page.
+4. In GitHub, go to **Settings → Secrets and variables → Actions** and add the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+5. Re-run the **Deploy to GitHub Pages** workflow.
+
+The online lobby shows each player's ping and connection type ("fast relay", "direct" or "backup relay").
+The free Workers plan covers casual play.
+For local testing, run `npx wrangler dev` in `worker/` and open the game with `?cf=ws://127.0.0.1:8787`.
 
 ## Deploy
 The included GitHub Action (`.github/workflows/pages.yml`) publishes the game to GitHub Pages on every push to `main`.

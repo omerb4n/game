@@ -104,6 +104,8 @@ small { display: block; font-size: 0.7rem; opacity: 0.7; font-weight: 500; }
 .pc-dev { font-size: 0.65rem; opacity: 0.75; text-align: right; flex: 1; }
 .pc-name { font-weight: 800; font-size: 1rem; text-align: center; }
 .pc-role { font-size: 0.75rem; color: #ffb3c8; }
+.pc-ping { font-size: 0.66rem; opacity: 0.9; }
+.pc-ping.good { color: #7dff9a; } .pc-ping.ok { color: #ffe14d; } .pc-ping.bad { color: #ff7a7a; }
 .pc-special { font-size: 0.68rem; color: var(--gold); opacity: 0.9; }
 .pc-arrows { display: flex; gap: 0.3rem; margin-top: auto; }
 .pc-arrows.muted { font-size: 0.75rem; }

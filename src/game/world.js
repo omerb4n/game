@@ -16,8 +16,7 @@ const DIFF = {
   normal: { hp: 1, speed: 1, interval: 1, cap: 0 },
   hard: { hp: 1.35, speed: 1.15, interval: 0.8, cap: 1 },
 };
-const SNAP_EVERY = 3; // steps (20Hz)
-const INTERP_DELAY = 110; // ms
+const SNAP_EVERY = 2; // steps (30Hz)
 
 export class World {
   constructor(cfg) {
@@ -58,6 +57,9 @@ export class World {
     this.teamHits = 0;
     this.anyDowned = false;
     this.snaps = [];
+    // Remote entities are drawn slightly in the past so motion stays smooth between updates.
+    // The delay adapts to how regularly updates actually arrive (lower on good connections).
+    this.interpDelay = 90; this.interpTarget = 90; this.arrivals = {};
     this.statsById = {};
     this.local = { kills: 0, stomps: 0, muffins: 0, revives: 0, shatters: 0, perfectShots: 0, hits: 0, coins: 0, pogos: 0, specials: 0, downs: 0 };
     this.parseMap();
@@ -257,10 +259,11 @@ export class World {
 
     // players
     const now = performance.now();
+    this.interpDelay += (this.interpTarget - this.interpDelay) * 0.05;
     for (const p of this.players) {
       if (!p.present) continue;
       if (p.local) p.update(dt);
-      else p.updateRemote(dt, now - INTERP_DELAY);
+      else p.updateRemote(dt, now - this.interpDelay);
     }
     this.updatePlayerProjectiles(dt);
     this.updateEnemyProjectiles(dt);
@@ -1272,6 +1275,7 @@ export class World {
           const p = this.playerById(st.i);
           if (p && !p.local && p.peer === from) {
             const wasDown = p.down;
+            this.noteArrival('p' + p.id, now());
             p.applyNet(st, now());
             if (!wasDown && p.down) this.anyDowned = true;
           }
@@ -1291,6 +1295,17 @@ export class World {
       s.on('prev', (m, from) => { s.broadcast(m, from); this.handleRevived(m.i, m.by); });
     } else {
       s.on('snap', (m) => this.onSnap(m));
+      // other players' movement relayed straight from them (skips the host hop)
+      s.on('ps', (m, from) => {
+        const t = performance.now();
+        for (const st of m.p) {
+          const p = this.playerById(st.i);
+          if (!p || p.local || p.peer !== from) continue;
+          p.directT = t;
+          this.noteArrival('p' + p.id, t);
+          p.applyNet(st, t);
+        }
+      });
       s.on('ep', (m) => this.onRemoteEP(m.b));
       s.on('epx', (m) => this.removeEP(m.ids));
       s.on('edie', (m) => this.onEnemyDie(m));
@@ -1304,6 +1319,18 @@ export class World {
       s.on('prev', (m) => this.handleRevived(m.i, m.by));
       s.on('lvlend', (m) => { this.state = m.kind; this.endLevel(m); });
     }
+  }
+  noteArrival(key, now) {
+    const a = this.arrivals[key] || (this.arrivals[key] = { last: 0, mean: 1000 / 30, dev: 8 });
+    if (a.last) {
+      const d = Math.min(500, now - a.last);
+      a.mean += (d - a.mean) * 0.1;
+      a.dev += (Math.abs(d - a.mean) - a.dev) * 0.1;
+    }
+    a.last = now;
+    let worst = 0;
+    for (const k in this.arrivals) { const b = this.arrivals[k]; if (now - b.last < 3000) worst = Math.max(worst, b.mean + 2.5 * b.dev); }
+    this.interpTarget = clamp(worst + 12, 45, 200);
   }
   removeEP(ids) {
     const set = new Set(ids);
@@ -1332,7 +1359,7 @@ export class World {
       };
       s.broadcast(snap);
     } else {
-      s.send({ type: 'ps', p: this.localPlayers().map((p) => p.serialize()) });
+      s.sendShared({ type: 'ps', p: this.localPlayers().map((p) => p.serialize()) });
     }
   }
   onSnap(m) {
@@ -1346,9 +1373,10 @@ export class World {
     if (m.m.st !== this.state && (m.m.st === 'play' || m.m.st === 'intro')) { this.state = m.m.st; }
     if (this.bestCombo < this.combo) this.bestCombo = this.combo;
     // players
+    this.noteArrival('host', now);
     for (const st of m.pl) {
       const p = this.playerById(st.i);
-      if (p && !p.local) p.applyNet(st, now);
+      if (p && !p.local && !(now - (p.directT || 0) < 600)) p.applyNet(st, now);
     }
     // enemies: create / update puppets
     const seen = new Set();
@@ -1386,7 +1414,7 @@ export class World {
     this.pickups = this.pickups.filter((k) => kseen.has(k.id));
   }
   clientInterp(dt) {
-    const rt = performance.now() - INTERP_DELAY;
+    const rt = performance.now() - this.interpDelay;
     const sample = (buf) => {
       if (!buf.length) return null;
       if (rt <= buf[0].t) return buf[0];
