@@ -48,14 +48,24 @@ They're bragging rights with no in-game effect, so competing for them never hurt
 *Guardian Angel* rewards revives specifically, which makes altruism a high-status act.
 
 ### 2.4 Scaling with player count
-Each extra player adds:
-- **+40%** enemy HP and **+65%** boss HP.
-- **+30%** concurrent enemies.
-- **+20%** muffin goal.
-- More lenient star thresholds.
+More friends should make the game **easier per person**, never harder. Each extra player brings a full share of firepower but adds only:
+- **+15%** enemy HP and **+35%** boss HP.
+- **+20%** concurrent enemies.
+- **+12%** muffin goal.
+- At most 2 helper minions during boss fights, and those only arrive every 12 s.
 
-The aim is the same "challenge per head" whether you play solo or with four.
-Solo players get **spare lives**, which auto-revive them, because nobody else can.
+A team of 4 therefore does about half the per-player work of a solo run.
+Measured with a test bot: two players used to take ~2.3× the hits of one player against King Gelatino. They now take about the same as a solo player and beat bosses much faster.
+
+Solo players get **spare lives**, which auto-revive them.
+In co-op on Casual or Normal, a downed player comes back on their own after 10 s or 20 s if nobody reaches them. A whole-team wipe still fails the level.
+Revives take 1 s, and players get 1.3 s of invulnerability after being hit.
+
+### Boss fairness
+- **Lower HP:** King Gelatino 180, Cocoa Colossus 250, Sorbet Wyrm 230, Burnt Baron 330.
+- **More breathing room:** longer pauses between attacks, and slower shockwaves you can jump over.
+- **Wider safe gaps:** 3 lanes in icicle and bullet rain, fewer and slower bullets, and a longer weak-core window on the Colossus.
+- **Healing:** a heart floats in every ~16 s during boss fights while anyone is hurt.
 
 ### 2.5 Dynamic difficulty, gently
 - Heart drop chance rises from 4.5% to **12%** while any player is on their last heart. This is a pity mechanic you never see.

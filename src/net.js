@@ -531,6 +531,7 @@ function hostBC(code) {
       return;
     }
     if (!s.peers.has(from)) return;
+    if (data.type === '__bye') { s._dropPeer(from); return; }
     s._dispatch(data, from);
   };
   s.startHeartbeat();
@@ -550,7 +551,7 @@ function joinBC(code) {
       if (data.type === '__welcome') {
         if (done) return;
         done = true;
-        s._addPeer('host', (m) => post(ch, { from: s.myId, to: 'host', data: m }), () => {});
+        s._addPeer('host', (m) => post(ch, { from: s.myId, to: 'host', data: m }), () => { try { ch.postMessage({ from: s.myId, to: 'host', data: { type: '__bye' } }); } catch (e) { /* closed */ } });
         s.startHeartbeat();
         resolve(s);
         return;

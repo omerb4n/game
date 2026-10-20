@@ -493,7 +493,8 @@ export class Renderer {
       }
       ctx.globalAlpha = 1;
       ctx.font = `bold 6px ${FONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
-      const label = p.autoRevive > 0 ? 'Reviving…' : 'HELP!';
+      const timerLeft = p.local ? (p.autoKind === 'timer' ? Math.ceil(p.autoRevive) : 0) : p.reviveIn || 0;
+      const label = timerLeft > 0 ? `HELP! (${timerLeft})` : p.autoRevive > 0 ? 'Reviving…' : 'HELP!';
       ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.strokeText(label, x, by - 18); ctx.fillText(label, x, by - 18);
       ctx.restore();
       return;
