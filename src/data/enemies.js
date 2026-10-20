@@ -310,8 +310,10 @@ export const ENEMIES = {
     ai(e, w, dt) {
       const p = w.nearestPlayer(e.x, e.y);
       if (!p) return;
-      const tx = p.x + p.w / 2 + Math.sin(w.time * 0.7 + e.id) * 30;
-      const ty = Math.max(24, p.y - 90);
+      let tx = p.x + p.w / 2 + Math.sin(w.time * 0.7 + e.id) * 30;
+      let ty = Math.max(24, p.y - 90);
+      // keep the hover point in open air (not inside a wall or the ceiling)
+      for (let k = 0; k < 6 && w.rectSolid(tx - e.w / 2, ty, e.w, e.h); k++) { tx += tx < W / 2 ? 16 : -16; ty += 8; }
       const dx = wrapDx(e.x + e.w / 2, tx), dy = ty - e.y;
       const s = spd(e);
       if (e.state === 'drop') {

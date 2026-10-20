@@ -21,6 +21,7 @@ const defaults = () => ({
     unlockAll: false,
     reduceFlashes: false,
     autoFullscreen: true,
+    camZoom: 1.35,
   },
   levels: {}, // '1-1': {stars, score, time, stars bits}
   worldsCleared: [],

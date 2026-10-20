@@ -1281,6 +1281,7 @@ class App {
           ${toggle('upToJump', 'Up to jump', 'Push stick / W / ↑ up to jump')}
           ${toggle('haptics', 'Vibration')}
           <h3>Display</h3>
+          ${slider('camZoom', 'Camera zoom', 1, 1.7, 0.05)}
           ${slider('shake', 'Screen shake', 0, 1.5, 0.05)}
           ${choice('quality', 'Graphics', [['low', 'Battery saver'], ['high', 'Beautiful']])}
           ${toggle('reduceFlashes', 'Reduce flashes')}
@@ -1295,6 +1296,7 @@ class App {
       el.nextElementSibling.textContent = `${Math.round(Number(el.value) * 100)}%`;
       save();
       applyVolumes(); touch.applyLayout();
+      if (el.dataset.key === 'camZoom') this.renderer.tileKey = '';
       if (el.dataset.key === 'sfx') sfx('coin');
     }));
   }
