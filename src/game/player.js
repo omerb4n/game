@@ -10,7 +10,7 @@ import { settings } from '../save.js';
 const GRAV_UP = 950, GRAV_CUT = 2500, GRAV_DOWN = 1350, MAX_FALL = 410, FAST_FALL = 540;
 const JUMP_V = 372, AIR_JUMP_V = 335;
 const COYOTE = 0.12, BUFFER = 0.15;
-const REVIVE_TIME = 1.4;
+const REVIVE_TIME = 1.0;
 
 export class Player {
   constructor(info, world) {
@@ -275,7 +275,7 @@ export class Player {
       return false;
     }
     this.hp -= dmg;
-    this.invuln = 1.1 + this.mods.invulnBonus;
+    this.invuln = 1.3 + this.mods.invulnBonus;
     this.hurtT = 0.35;
     this.flash = 1;
     const dir = Math.sign(this.cx - srcX) || -this.facing;
@@ -310,7 +310,8 @@ export class Player {
     w.stat(this, 'downs');
     if (this.mods.secondBake > this.secondBakeUsed) { this.secondBakeUsed++; this.autoRevive = 1.4; this.autoKind = 'second'; }
     else if (this.lives > 0) { this.lives--; this.autoRevive = 2.0; this.autoKind = 'life'; }
-    else if (w.diffName === 'casual' && w.players.length > 1) { this.autoRevive = 12; this.autoKind = 'casual'; }
+    // co-op safety net: a downed player comes back on their own if nobody can reach them in time
+    else if (w.players.length > 1 && w.diffName !== 'hard') { this.autoRevive = w.diffName === 'casual' ? 10 : 20; this.autoKind = 'timer'; }
     else this.autoRevive = 0;
     w.onPlayerDown(this);
   }
@@ -381,7 +382,7 @@ export class Player {
       i: this.id, x: round1(this.x), y: round1(this.y), vx: Math.round(this.vx), vy: Math.round(this.vy), f: this.facing,
       hp: this.hp, mh: this.maxHp, d: this.down ? 1 : 0, iv: this.invuln > 0 ? 1 : 0, ax: round1(this.aimX), ay: round1(this.aimY),
       sw: this.swing.kind, st: round1(this.swing.t), sd: this.swing.dur, sb: this.swing.big ? 1 : 0, ch: round1(this.charge),
-      og: this.onGround ? 1 : 0, rv: this.mods.reviveMul, rp: round1(this.reviveProg), ar: this.autoRevive > 0 ? 1 : 0,
+      og: this.onGround ? 1 : 0, rv: this.mods.reviveMul, rp: round1(this.reviveProg), ar: this.autoRevive > 0 && this.autoKind !== 'timer' ? 1 : 0, at: this.autoKind === 'timer' ? Math.ceil(this.autoRevive) : 0,
       mg: this.mods.magnet, sh: this.shield > 0 ? 1 : 0, ru: this.rushT > 0 ? 1 : 0, rt: round1(this.runT), hu: this.hurtT > 0 ? 1 : 0,
       cd: round1(this.specialMax ? this.cd.special / this.specialMax : 0),
     };
@@ -403,6 +404,7 @@ export class Player {
     this.remoteMagnet = s.mg || 0;
     this.reviveProg = s.rp;
     this.autoRevive = s.ar ? 1 : 0;
+    this.reviveIn = s.at || 0;
     this.remoteInvuln = !!s.iv;
     this.shield = s.sh ? 1 : 0;
     this.rushT = s.ru ? 1 : 0;

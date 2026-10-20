@@ -523,7 +523,7 @@ function bossPhase(e) { return e.hp / e.maxHp; }
 
 export const BOSSES = {
   jellyking: {
-    name: 'King Gelatino', title: 'The Wobbling Monarch', w: 44, h: 36, hp: 240, speed: 80, score: 1000, stomp: 'bounce', heavy: true, boss: true, crumbs: ['#ff5a9e', '#ffb3d6', '#ffd34d'],
+    name: 'King Gelatino', title: 'The Wobbling Monarch', w: 44, h: 36, hp: 180, speed: 80, score: 1000, stomp: 'bounce', heavy: true, boss: true, crumbs: ['#ff5a9e', '#ffb3d6', '#ffd34d'],
     ai(e, w, dt) {
       const p = w.nearestPlayer(e.x, e.y);
       const hpF = bossPhase(e);
@@ -537,16 +537,16 @@ export const BOSSES = {
           break;
         case 'idle':
           e.vx *= 0.85;
-          if (e.st > (rage ? 0.45 : 0.8) && e.onGround) {
+          if (e.st > (rage ? 0.8 : 1.3) && e.onGround) {
             setState(e, chance(0.6) ? 'hop' : 'bigslam');
-            e.data.hops = rage ? 4 : 3;
+            e.data.hops = rage ? 3 : 2;
           }
           break;
         case 'hop':
           if (e.onGround && e.st > 0.1) {
             if (e.data.air) {
               e.data.air = false;
-              w.shockwave(e, e.x + e.w / 2, e.y + e.h, rage ? 170 : 140);
+              w.shockwave(e, e.x + e.w / 2, e.y + e.h, rage ? 140 : 115);
               e.data.hops--;
               if (e.data.hops <= 0) { setState(e, 'idle'); break; }
             }
@@ -569,8 +569,8 @@ export const BOSSES = {
           }
           if (e.onGround && e.data.hang) {
             e.data.hang = false; e.data.air = false;
-            w.shockwave(e, e.x + e.w / 2, e.y + e.h, 210, true);
-            for (let i = 0; i < (rage ? 6 : 4); i++) w.enemyShoot(e, { kind: 'jelly', x: e.x + e.w / 2, y: e.y + 6, vx: rand(-160, 160), vy: rand(-380, -240), g: 500, r: 4, life: 3 });
+            w.shockwave(e, e.x + e.w / 2, e.y + e.h, 160, true);
+            for (let i = 0; i < (rage ? 4 : 2); i++) w.enemyShoot(e, { kind: 'jelly', x: e.x + e.w / 2, y: e.y + 6, vx: rand(-160, 160), vy: rand(-380, -240), g: 500, r: 4, life: 3 });
             setState(e, 'idle');
           }
           break;
@@ -579,7 +579,7 @@ export const BOSSES = {
           if (e.st > 0.1 && !e.data.summoned) {
             e.data.summoned = true;
             w.esfx('roar', e.x);
-            for (let i = 0; i < 3; i++) w.spawnEnemyAt('gumdrop', e.x + e.w / 2 + (i - 1) * 30, e.y, { vx: (i - 1) * 140, vy: -300, enraged: hpF < 0.34 });
+            for (let i = 0; i < 2; i++) w.spawnEnemyAt('gumdrop', e.x + e.w / 2 + (i ? 20 : -20), e.y, { vx: (i ? 1 : -1) * 140, vy: -300 });
           }
           if (e.st > 1.2) { e.data.summoned = false; setState(e, 'idle'); }
           break;
@@ -614,7 +614,7 @@ export const BOSSES = {
     },
   },
   golem: {
-    name: 'Cocoa Colossus', title: 'Heart of the Mine', w: 48, h: 50, hp: 320, speed: 22, score: 1500, stomp: 'bounce', heavy: true, boss: true, crumbs: ['#6b3f2a', '#a8683f', '#ffb347'],
+    name: 'Cocoa Colossus', title: 'Heart of the Mine', w: 48, h: 50, hp: 250, speed: 22, score: 1500, stomp: 'bounce', heavy: true, boss: true, crumbs: ['#6b3f2a', '#a8683f', '#ffb347'],
     ai(e, w, dt) {
       const p = w.nearestPlayer(e.x, e.y);
       const hpF = bossPhase(e);
@@ -628,7 +628,7 @@ export const BOSSES = {
           faceToward(e, p);
           e.vx = e.facing * spd(e);
           if (e.hitWall) e.vx = 0;
-          if (e.st > (p2 ? 1.0 : 1.5)) {
+          if (e.st > (p2 ? 1.4 : 2.0)) {
             const r = Math.random();
             if (r < 0.45) { setState(e, 'raise'); w.esfx('telegraph', e.x); }
             else if (r < 0.75) setState(e, 'throw');
@@ -639,8 +639,8 @@ export const BOSSES = {
           e.vx = 0;
           if (e.st > 0.9) {
             w.esfx('slam', e.x); w.fxEvent('shake', e.x, e.y, 0.6);
-            w.shockwave(e, e.x + e.w / 2, e.y + e.h, p2 ? 210 : 170, true);
-            const n = p2 ? 5 : 3;
+            w.shockwave(e, e.x + e.w / 2, e.y + e.h, p2 ? 170 : 140, true);
+            const n = p2 ? 4 : 2;
             for (let i = 0; i < n; i++) {
               const x = rand(30, W - 30);
               w.enemyShoot(e, { kind: 'rock', x, y: 4, vx: 0, vy: 0, g: 600, r: 6, life: 3, delay: 0.7 + i * 0.12 });
@@ -650,14 +650,14 @@ export const BOSSES = {
           break;
         case 'vent':
           e.vx = 0;
-          if (e.st > 1.8) setState(e, 'idle');
+          if (e.st > 2.6) setState(e, 'idle'); // long punish window
           break;
         case 'throw':
           e.vx = 0;
           if (e.st > 0.5 && !e.data.thrown) {
             e.data.thrown = true;
             const targets = w.alivePlayers();
-            const n = p2 ? 4 : 3;
+            const n = p2 ? 3 : 2;
             for (let i = 0; i < n; i++) {
               const tp = targets[i % Math.max(1, targets.length)] || p;
               if (!tp) break;
@@ -729,7 +729,7 @@ export const BOSSES = {
     },
   },
   wyrm: {
-    name: 'Sorbet Wyrm', title: 'Terror of the Peaks', w: 26, h: 22, hp: 300, speed: 90, score: 2000, stomp: 'no', flying: true, noclip: true, heavy: true, boss: true, segments: 9, crumbs: ['#ff9ad5', '#8fd6ff', '#fff36b', '#9dffb0'],
+    name: 'Sorbet Wyrm', title: 'Terror of the Peaks', w: 26, h: 22, hp: 230, speed: 90, score: 2000, stomp: 'no', flying: true, noclip: true, heavy: true, boss: true, segments: 9, crumbs: ['#ff9ad5', '#8fd6ff', '#fff36b', '#9dffb0'],
     ai(e, w, dt) {
       const p = w.nearestPlayer(e.x, e.y);
       const hpF = bossPhase(e);
@@ -746,7 +746,7 @@ export const BOSSES = {
           e.vx += ((tx - e.x) * 2.5 - e.vx) * dt * 3; e.vy += ((ty - e.y) * 2.5 - e.vy) * dt * 3;
           e.data.sh = (e.data.sh ?? 1) - dt;
           if (e.data.sh <= 0 && p) {
-            e.data.sh = p2 ? 0.7 : 1.1;
+            e.data.sh = p2 ? 1.1 : 1.6;
             const a = Math.atan2(p.y - e.y, wrapDx(e.x, p.x));
             w.enemyShoot(e, { kind: 'shard', x: e.x + e.w / 2, y: e.y + e.h / 2, vx: Math.cos(a) * 150, vy: Math.sin(a) * 150, r: 3.5, life: 3, slow: 1.2, noclip: true });
           }
@@ -759,7 +759,7 @@ export const BOSSES = {
         case 'aimSwoop':
           e.vx *= 0.9; e.vy *= 0.9;
           if (e.st < 0.05 && p) { e.data.tx = p.x + p.w / 2; e.data.ty = p.y + p.h / 2; w.fxEvent('line', e.x + e.w / 2, e.y + e.h / 2, 0.8, { x2: e.data.tx, y2: e.data.ty }); w.esfx('telegraph', e.x); }
-          if (e.st > 0.8) {
+          if (e.st > 1.0) {
             const dx = e.data.tx - (e.x + e.w / 2), dy = e.data.ty - (e.y + e.h / 2), d = Math.hypot(dx, dy) || 1;
             e.vx = (dx / d) * 330; e.vy = (dy / d) * 330;
             setState(e, 'swoop'); w.esfx('roar', e.x);
@@ -777,11 +777,11 @@ export const BOSSES = {
           if (e.st > 0.9 && e.st < 2.6) {
             e.data.bt = (e.data.bt ?? 0) - dt;
             if (e.data.bt <= 0 && p) {
-              e.data.bt = 0.55;
+              e.data.bt = 0.75;
               const a0 = Math.atan2(p.y - e.y, wrapDx(e.x, p.x));
-              const n = p2 ? 9 : 7;
+              const n = p2 ? 7 : 5;
               for (let i = 0; i < n; i++) {
-                const a = a0 + (i - (n - 1) / 2) * 0.16;
+                const a = a0 + (i - (n - 1) / 2) * 0.18;
                 w.enemyShoot(e, { kind: 'shard', x: e.x + e.w / 2, y: e.y + e.h / 2, vx: Math.cos(a) * 130, vy: Math.sin(a) * 130, r: 3.5, life: 4, slow: 1.2, noclip: true });
               }
               w.esfx('freeze', e.x);
@@ -798,7 +798,7 @@ export const BOSSES = {
             const n = p2 ? 12 : 9;
             const gap = Math.floor(rand(1, n - 2));
             for (let i = 0; i < n; i++) {
-              if (i === gap) continue;
+              if (Math.abs(i - gap) <= 1) continue; // 3-lane safe gap
               const x = 16 + (i + 0.5) * ((W - 32) / n);
               w.enemyShoot(e, { kind: 'icicle', x, y: 2, vx: 0, vy: 0, g: 700, r: 5, life: 3, delay: 0.9 + (i % 2) * 0.25 });
             }
@@ -850,7 +850,7 @@ export const BOSSES = {
     },
   },
   baron: {
-    name: 'The Burnt Baron', title: 'Lord of the Oven', w: 22, h: 32, hp: 420, speed: 60, score: 3000, stomp: 'spiky', flying: true, noclip: true, heavy: true, boss: true, crumbs: ['#3a2020', '#ff7a3d', '#ffd34d'],
+    name: 'The Burnt Baron', title: 'Lord of the Oven', w: 22, h: 32, hp: 330, speed: 60, score: 3000, stomp: 'spiky', flying: true, noclip: true, heavy: true, boss: true, crumbs: ['#3a2020', '#ff7a3d', '#ffd34d'],
     ai(e, w, dt) {
       const p = w.nearestPlayer(e.x, e.y);
       const hpF = bossPhase(e);
@@ -882,7 +882,7 @@ export const BOSSES = {
           break;
         case 'idle': {
           hover();
-          if (e.st > (phase === 1 ? 1.1 : phase === 2 ? 0.8 : 0.55)) {
+          if (e.st > (phase === 1 ? 1.5 : phase === 2 ? 1.1 : 0.8)) {
             const opts = ['aimed', 'ring', 'spiral', 'teleport'];
             if (phase >= 2) opts.push('rain', 'summon');
             if (phase >= 3) opts.push('spiral', 'ring');
@@ -901,7 +901,7 @@ export const BOSSES = {
             const tp = pick(w.alivePlayers()) || p;
             if (tp) {
               const a = Math.atan2(tp.y + tp.h / 2 - sy, wrapDx(sx, tp.x + tp.w / 2));
-              const spread = phase === 3 ? 5 : 3;
+              const spread = phase === 3 ? 4 : 3;
               for (let i = 0; i < spread; i++) shoot(a + (i - (spread - 1) / 2) * 0.18, 125);
               w.esfx('eshoot', e.x);
             }
@@ -911,9 +911,9 @@ export const BOSSES = {
         case 'ring':
           e.vx *= 0.9; e.vy *= 0.9;
           if (e.st > 0.5 + e.data.n * 0.55 && e.data.n < (phase === 1 ? 2 : 3)) {
-            const n = phase === 1 ? 14 : 18;
+            const n = phase === 1 ? 12 : 15;
             const off = e.data.n * 0.5;
-            for (let i = 0; i < n; i++) shoot((i / n) * TAU + off, phase === 3 ? 105 : 90);
+            for (let i = 0; i < n; i++) shoot((i / n) * TAU + off, phase === 3 ? 95 : 80);
             e.data.n++;
             w.esfx('eshoot', e.x, 0.7);
           }
@@ -923,7 +923,7 @@ export const BOSSES = {
           e.vx *= 0.9; e.vy *= 0.9;
           e.data.k = (e.data.k || 0) - dt;
           if (e.st > 0.4 && e.st < 3 && e.data.k <= 0) {
-            e.data.k = phase === 3 ? 0.07 : 0.09;
+            e.data.k = phase === 3 ? 0.1 : 0.12;
             const a = e.st * 3.2;
             shoot(a, 95);
             if (phase >= 2) shoot(a + Math.PI, 95);
@@ -937,7 +937,7 @@ export const BOSSES = {
             e.data.rained = true;
             const gap = Math.floor(rand(2, 13));
             for (let i = 0; i < 16; i++) {
-              if (Math.abs(i - gap) <= 1) continue;
+              if (Math.abs(i - gap) <= 2) continue;
               w.enemyShoot(e, { kind: 'bullet2', x: 16 + i * 30, y: -6, vx: 0, vy: 70 + (i % 2) * 15, r: 3.5, life: 6, noclip: true, delay: 0.5 });
             }
           }

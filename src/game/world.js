@@ -82,12 +82,15 @@ export class World {
     // objective
     const L = this.level;
     this.obj = { type: L.type, goal: 0, count: 0, timeLeft: 0, golden: false, wave: 0, waves: L.waves || 0, toKill: 0, killed: 0, spawned: 0, waveBreak: 0, boss: null, bossId: 0 };
-    if (L.type === 'collect') this.obj.goal = Math.round(L.goal * (1 + 0.2 * (n - 1)));
+    // Team-size scaling: each extra player adds less work than they bring firepower, so the game
+    // gets easier per person with more friends (a full team of 4 does ~half the per-player work of solo).
+    if (L.type === 'collect') this.obj.goal = Math.round(L.goal * (1 + 0.12 * (n - 1)));
     if (L.type === 'survive') this.obj.timeLeft = L.time;
     if (L.type === 'waves') this.startWave(1);
-    this.hpScale = (1 + 0.4 * (n - 1)) * this.diff.hp * (L.hpScale || 1);
-    this.bossHpScale = (1 + 0.65 * (n - 1)) * this.diff.hp * (L.hpScale || 1);
-    this.cap = Math.max(1, Math.round((L.maxAlive || 4) * (1 + 0.3 * (n - 1))) + this.diff.cap);
+    this.hpScale = (1 + 0.15 * (n - 1)) * this.diff.hp * (L.hpScale || 1);
+    this.bossHpScale = (1 + 0.35 * (n - 1)) * this.diff.hp * (L.hpScale || 1);
+    this.cap = Math.max(1, Math.round((L.maxAlive || 4) * (1 + 0.2 * (n - 1))) + this.diff.cap);
+    this.mercyT = 14;
     this.setupNet();
   }
 
@@ -316,7 +319,7 @@ export class World {
     if (this.state === 'play') {
       // director
       if (o.type !== 'boss') this.director(dt);
-      else if (this.level.boss && o.boss) this.bossMinions(dt);
+      else if (this.level.boss && o.boss) { this.bossMinions(dt); this.bossMercy(dt); }
       // objectives
       if (o.type === 'survive') {
         const prev = o.timeLeft;
@@ -360,7 +363,8 @@ export class World {
       }
       // fail check
       const present = this.players.filter((p) => p.present);
-      if (present.length && present.every((p) => p.down && !p.autoRevive)) {
+      // everyone down = fail, unless someone has a quick self-revive coming (spare life / Second Bake)
+      if (present.length && present.every((p) => p.down && !(p.autoRevive > 0 && p.autoKind !== 'timer'))) {
         this.failT += dt;
         if (this.failT > 1.2) this.levelFail();
       } else this.failT = 0;
@@ -437,12 +441,24 @@ export class World {
     if (!this.level.enemies || this.nPlayers < 2) return;
     this.spawnT -= dt;
     const alive = this.enemies.filter((e) => !e.def.boss).length + this.portalQueue.length;
-    if (this.spawnT <= 0 && alive < this.nPlayers - 1) {
-      this.spawnT = 7;
+    if (this.spawnT <= 0 && alive < Math.min(2, this.nPlayers - 1)) {
+      this.spawnT = 12;
       this.openPortal(weightedPick(this.level.enemies));
     }
   }
 
+  // Boss fights drop no loot until the end, so float a heart in now and then for whoever is hurt.
+  bossMercy(dt) {
+    this.mercyT -= dt;
+    if (this.mercyT > 0) return;
+    this.mercyT = this.diffName === 'hard' ? 26 : this.diffName === 'casual' ? 11 : 16;
+    const hurt = this.players.some((p) => p.present && !p.down && p.hp < p.maxHp);
+    if (!hurt || this.pickups.filter((k) => k.kind === 'heart').length >= 2) return;
+    const sp = pick(this.standSpots) || { x: W / 2, y: H / 2 };
+    const k = this.spawnPickup('heart', sp.x, sp.y - 12, 0, 0);
+    k.float = true; k.life = 14;
+    this.fxEvent('rush', sp.x, sp.y - 12, 0);
+  }
   spawnEnemyAt(type, x, y, o = {}) {
     const def = enemyDef(type);
     if (this.mut.has('enraged') && !def.boss) o = { ...o, enraged: true };
