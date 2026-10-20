@@ -119,6 +119,10 @@ Mobile co-op means every friend is on their own phone. Room codes run over WebRT
 - **Deterministic projectiles**: the host sends each enemy shot once as a spawn event. Each client then simulates it locally, so dodging is judged against what you actually saw.
 - Clients relay cosmetic events (shots, zones, effects) through the host.
 - Disconnects are handled without crashing the game.
+- **Relay fallback**: a joining client first tries direct WebRTC for 7 s.
+  - If that fails, it reaches the host through a public MQTT broker over `wss://`.
+  - The host listens on several brokers at once, and the client uses the first one it can reach.
+  - The game protocol is the same over either path. The relay adds some latency, but it gets through any network that allows web browsing.
 
 ## Sources
 - [Muffin Knight on Steam](https://store.steampowered.com/app/263700)

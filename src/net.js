@@ -1,4 +1,5 @@
-// Networking: host-authoritative star topology over WebRTC (PeerJS) or BroadcastChannel (testing).
+// Networking: host-authoritative star topology over WebRTC (PeerJS), an MQTT relay fallback,
+// or BroadcastChannel (testing).
 import { uid } from './util.js';
 
 const PREFIX = 'pastrypaladins-v1-';
@@ -104,11 +105,118 @@ export function localSession() {
   return new Session('local');
 }
 
-// ---------------------------------------------------------------- PeerJS transport
+// ---------------------------------------------------------------- Relay transport (MQTT over secure WebSockets)
+// Direct WebRTC fails between some networks (mobile carrier NAT, strict routers). As a fallback every
+// message is relayed through a public MQTT broker over wss:// — plain web traffic that works anywhere.
+// The host listens on several brokers at once; a client uses the first broker it can reach.
+const RELAY_BROKERS = (() => {
+  const q = new URLSearchParams(location.search).get('relay');
+  if (q) return q.split(',');
+  return ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081/mqtt'];
+})();
+const RELAY_ROOT = 'pastrypaladins/v1/';
+const topicHost = (code) => `${RELAY_ROOT}${code}/host`;
+const topicClient = (code, id) => `${RELAY_ROOT}${code}/c/${id}`;
+let mqttLibPromise = null;
+function loadMqtt() {
+  if (window.mqtt) return Promise.resolve(window.mqtt);
+  if (mqttLibPromise) return mqttLibPromise;
+  mqttLibPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'vendor/mqtt.min.js';
+    s.onload = () => (window.mqtt ? resolve(window.mqtt) : reject(new Error('Relay library failed to load')));
+    s.onerror = () => { mqttLibPromise = null; reject(new Error('Could not load relay library.')); };
+    document.head.appendChild(s);
+  });
+  return mqttLibPromise;
+}
+function connectBroker(mqtt, url, timeout = 6000) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const c = mqtt.connect(url, { clientId: 'pp_' + uid() + uid(), clean: true, connectTimeout: timeout, reconnectPeriod: 2000, keepalive: 30 });
+    const t = setTimeout(() => { if (!settled) { settled = true; c.end(true); reject(new Error('relay timeout')); } }, timeout);
+    c.once('connect', () => { if (!settled) { settled = true; clearTimeout(t); resolve(c); } });
+    c.once('error', () => { if (!settled) { settled = true; clearTimeout(t); c.end(true); reject(new Error('relay error')); } });
+  });
+}
+
+// Host side: accept clients through every reachable broker. Returns number of brokers connected.
+async function startRelayHost(s) {
+  let mqtt;
+  try { mqtt = await loadMqtt(); } catch (e) { return 0; }
+  s._relays = [];
+  const results = await Promise.allSettled(RELAY_BROKERS.map((u) => connectBroker(mqtt, u)));
+  for (const r of results) {
+    if (r.status !== 'fulfilled') continue;
+    const c = r.value;
+    if (s.closed) { c.end(true); continue; }
+    s._relays.push(c);
+    c.subscribe(topicHost(s.code));
+    c.on('message', (topic, payload) => {
+      let m;
+      try { m = JSON.parse(payload.toString()); } catch (e) { return; }
+      const from = m.f;
+      if (!from) return;
+      if (m.d?.type === '__hello') {
+        if (!s.peers.has(from)) {
+          s._addPeer(from, (msg) => c.publish(topicClient(s.code, from), JSON.stringify(msg)), () => {});
+          s.peers.get(from).relay = true;
+          s.onPeerJoin?.(from);
+        }
+        c.publish(topicClient(s.code, from), JSON.stringify({ type: '__welcome' }));
+        return;
+      }
+      if (m.d?.type === '__bye') { s._dropPeer(from); return; }
+      if (s.peers.has(from)) s._dispatch(m.d, from);
+    });
+  }
+  return s._relays.length;
+}
+
+// Client side: reach the host through the first broker that answers.
+async function joinRelay(s, onStatus) {
+  const mqtt = await loadMqtt();
+  for (const url of RELAY_BROKERS) {
+    let c;
+    try { c = await connectBroker(mqtt, url); } catch (e) { continue; }
+    onStatus?.('Room found? Asking the host through the relay…');
+    const ok = await new Promise((resolve) => {
+      const t = setTimeout(() => resolve(false), 6000);
+      c.subscribe(topicClient(s.code, s.myId), () => {
+        c.publish(topicHost(s.code), JSON.stringify({ f: s.myId, d: { type: '__hello' } }));
+      });
+      c.on('message', (topic, payload) => {
+        let m;
+        try { m = JSON.parse(payload.toString()); } catch (e) { return; }
+        if (m.type === '__welcome') {
+          if (!s.peers.has('host')) {
+            clearTimeout(t);
+            s._addPeer('host', (msg) => c.publish(topicHost(s.code), JSON.stringify({ f: s.myId, d: msg })), () => {
+              try { c.publish(topicHost(s.code), JSON.stringify({ f: s.myId, d: { type: '__bye' } })); } catch (e) { /* ignore */ }
+            });
+            resolve(true);
+          }
+          return;
+        }
+        if (s.peers.has('host')) s._dispatch(m, 'host');
+      });
+    });
+    if (ok) {
+      s._relays = [c];
+      s.transport = 'relay';
+      return true;
+    }
+    c.end(true);
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------- Hosting (WebRTC + relay)
 export async function hostSession(code, useBC = false, attempt = 0) {
   if (useBC) return hostBC(code);
+  let s;
   try {
-    return await hostPeer(code);
+    s = await hostPeer(code);
   } catch (e) {
     // room code collision: retry with a fresh code
     if (e.code === 'taken' && attempt < 3) {
@@ -117,8 +225,17 @@ export async function hostSession(code, useBC = false, attempt = 0) {
       for (let i = 0; i < 5; i++) c += chars[Math.floor(Math.random() * chars.length)];
       return hostSession(c, false, attempt + 1);
     }
-    throw e;
+    // matchmaking server unreachable: host through the relay only
+    s = new Session('host');
+    s.code = code;
+    s._closeTransport = () => { for (const c of s._relays || []) { try { c.end(true); } catch (x) { /* ignore */ } } };
+    s.startHeartbeat();
+    const n = await startRelayHost(s);
+    if (!n) { s.close(); throw e; }
+    return s;
   }
+  await startRelayHost(s);
+  return s;
 }
 
 async function hostPeer(code) {
@@ -128,7 +245,10 @@ async function hostPeer(code) {
   return new Promise((resolve, reject) => {
     const peer = new Peer(PREFIX + code, peerOptions());
     let opened = false;
-    s._closeTransport = () => { try { peer.destroy(); } catch (e) { /* ignore */ } };
+    s._closeTransport = () => {
+      try { peer.destroy(); } catch (e) { /* ignore */ }
+      for (const c of s._relays || []) { try { c.end(true); } catch (e) { /* ignore */ } }
+    };
     peer.on('open', () => { opened = true; s.startHeartbeat(); resolve(s); });
     peer.on('error', (err) => {
       if (!opened) {
@@ -146,39 +266,61 @@ async function hostPeer(code) {
         s.onPeerJoin?.(id);
       });
       conn.on('data', (d) => s._dispatch(d, id));
-      conn.on('close', () => s._dropPeer(id));
-      conn.on('error', () => s._dropPeer(id));
+      conn.on('close', () => { if (!s.peers.get(id)?.relay) s._dropPeer(id); });
+      conn.on('error', () => { if (!s.peers.get(id)?.relay) s._dropPeer(id); });
     });
-    setTimeout(() => { if (!opened) reject(new Error('Timed out contacting the matchmaking server.')); }, 12000);
+    setTimeout(() => { if (!opened) { try { peer.destroy(); } catch (x) { /* ignore */ } reject(new Error('Timed out contacting the matchmaking server.')); } }, 10000);
   });
 }
 
-export async function joinSession(code, useBC = false) {
+// ---------------------------------------------------------------- Joining (try WebRTC, fall back to relay)
+const DIRECT_TIMEOUT = 7000;
+export async function joinSession(code, useBC = false, onStatus) {
   if (useBC) return joinBC(code);
-  const Peer = await loadPeerJS();
   const s = new Session('client');
   s.code = code;
-  return new Promise((resolve, reject) => {
-    const peer = new Peer(undefined, peerOptions());
+  const closeAll = () => {
+    try { s._peer?.destroy(); } catch (e) { /* ignore */ }
+    for (const c of s._relays || []) { try { c.end(true); } catch (e) { /* ignore */ } }
+  };
+  s._closeTransport = closeAll;
+  onStatus?.('Connecting directly…');
+  let direct = false;
+  try { direct = await joinDirect(s, code); } catch (e) { direct = false; }
+  if (direct) { s.transport = 'direct'; s.startHeartbeat(); return s; }
+  // tear down the failed WebRTC attempt so it can't open late
+  try { s._peer?.destroy(); } catch (e) { /* ignore */ }
+  s._peer = null;
+  s.myId = uid() + uid();
+  onStatus?.('Direct link blocked by the network — switching to relay…');
+  let ok = false;
+  try { ok = await joinRelay(s, onStatus); } catch (e) { ok = false; }
+  if (!ok) { s.close(); throw new Error(`Couldn't reach room ${code}. Check the code, and that the host still has the room open.`); }
+  s.startHeartbeat();
+  return s;
+}
+
+async function joinDirect(s, code) {
+  const Peer = await loadPeerJS();
+  return new Promise((resolve) => {
     let done = false;
-    s._closeTransport = () => { try { peer.destroy(); } catch (e) { /* ignore */ } };
-    peer.on('error', (err) => {
-      if (!done) { done = true; reject(new Error(err.type === 'peer-unavailable' ? `Room ${code} not found.` : 'Connection error: ' + (err.type || err.message))); }
-    });
+    const finish = (v) => { if (!done) { done = true; resolve(v); } };
+    const peer = new Peer(undefined, peerOptions());
+    s._peer = peer;
+    peer.on('error', () => finish(false));
     peer.on('open', (myId) => {
       s.myId = myId;
       const conn = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });
       conn.on('open', () => {
+        if (done) { try { conn.close(); } catch (e) { /* ignore */ } return; }
         s._addPeer('host', (m) => conn.send(m), () => conn.close());
-        s.startHeartbeat();
-        done = true;
-        resolve(s);
+        conn.on('close', () => s._dropPeer('host'));
+        conn.on('error', () => s._dropPeer('host'));
+        finish(true);
       });
       conn.on('data', (d) => s._dispatch(d, 'host'));
-      conn.on('close', () => s._dropPeer('host'));
-      conn.on('error', () => s._dropPeer('host'));
     });
-    setTimeout(() => { if (!done) { done = true; reject(new Error('Timed out joining room.')); s.close(); } }, 15000);
+    setTimeout(() => finish(false), DIRECT_TIMEOUT);
   });
 }
 

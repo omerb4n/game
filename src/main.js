@@ -609,7 +609,7 @@ class App {
     if (code.length < 4) { this.netMsg('Enter the 5-letter room code', true); return; }
     this.netMsg(`Joining ${code}…`);
     try {
-      const s = await joinSession(code, USE_BC);
+      const s = await joinSession(code, USE_BC, (m) => this.netMsg(m));
       this.session = s;
       this.pendingJoin = null;
       this.localSlots = [{ ctl: this.defaultCtl(), hero: this.localSlots[0]?.hero || this.firstHero(), hat: null }];
@@ -617,7 +617,7 @@ class App {
       this.setupClientHandlers();
       const sl = this.localSlots[0];
       s.send({ type: 'hello', name, hero: sl.hero, hat: S().equipped[sl.hero] || 'none' });
-      this.netMsg('Connected! Waiting for room info…');
+      this.netMsg(`Connected${s.transport === 'relay' ? ' via relay' : ''}! Waiting for room info…`);
     } catch (e) {
       this.netMsg(e.message || String(e), true);
     }
