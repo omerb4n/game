@@ -72,7 +72,7 @@ Invite links carry these parameters along automatically.
   - Aim assist and damage numbers.
   - Touch button size and opacity, plus a left-handed layout.
   - Up-to-jump, vibration, and screen shake.
-  - Graphics quality, reduce flashes, and an FPS/ping display.
+  - Camera zoom, graphics quality, reduce flashes, and an FPS/ping display.
   - Party mode (unlock everything).
 
 See **[DESIGN.md](DESIGN.md)** for the game-design research (co-op game theory, skill, risk and reward, flow) and the netcode architecture.

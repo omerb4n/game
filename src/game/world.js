@@ -497,11 +497,11 @@ export class World {
         }
       }
       const disabled = e.frozen > 0 || e.stun > 0 || e.kbT > 0;
-      if (!disabled) def.ai(e, this, dt);
+      if (!disabled) { def.ai(e, this, dt); if (!def.boss && !def.noclip) this.unstick(e, dt); }
       else { e.vx *= def.flying ? 0.9 : e.onGround ? 0.82 : 0.95; if (def.flying && e.frozen <= 0) e.vy *= 0.9; }
       if (!def.flying || e.frozen > 0) e.vy = Math.min(e.vy + 900 * this.gravMul * dt, 420);
       if (def.noclip && e.frozen <= 0) { e.x += e.vx * dt; e.y += e.vy * dt; e.onGround = false; e.hitWall = 0; }
-      else this.moveEntity(e, dt);
+      else this.moveEntity(e, dt, { drop: def.flying && e.frozen <= 0 }); // flyers pass through wafer platforms
       if (!def.boss || def.noclip) this.wrapEntity(e);
       if (def.boss && !def.noclip) e.x = clamp(e.x, 0, W - e.w);
       if (def.segments) { e.trail.unshift({ x: e.x + e.w / 2, y: e.y + e.h / 2 }); if (e.trail.length > 70) e.trail.pop(); }
@@ -549,6 +549,45 @@ export class World {
         k.life -= dt;
         if (k.life <= 0) { this.pickups.splice(i, 1); continue; }
       }
+    }
+  }
+
+  // Enemies that chase in a straight line can end up pressing into a wall forever (e.g. a bat with
+  // the player on the other side). If one hasn't moved for ~0.6s while trying to, give it a detour:
+  // flyers slide vertically toward open space for a moment, walkers turn around and hop.
+  unstick(e, dt) {
+    const d = e.data;
+    if (d.detour && d.detour.t > 0) {
+      d.detour.t -= dt;
+      e.vx = d.detour.vx;
+      if (e.def.flying) e.vy = d.detour.vy;
+      if (e.facing && d.detour.vx) e.facing = Math.sign(d.detour.vx);
+      return;
+    }
+    const busy = ['aim', 'cast', 'idle', 'windup', 'drop', 'dizzy', 'stunned', 'tele', 'prep'].includes(e.state) || d.edge;
+    const wantsToMove = Math.abs(e.vx) > 5 || (e.def.flying && Math.abs(e.vy) > 5);
+    d.stuckT = d.stuckT || 0;
+    if (busy || !wantsToMove) { d.stuckT = 0; d.sx = e.x; d.sy = e.y; return; }
+    if (d.sx === undefined) { d.sx = e.x; d.sy = e.y; }
+    d.stuckT += dt;
+    if (d.stuckT < 0.6) return;
+    const moved = Math.abs(e.x - d.sx) + Math.abs(e.y - d.sy);
+    d.stuckT = 0; d.sx = e.x; d.sy = e.y;
+    if (moved > 4) return;
+    const spd = Math.max(40, e.def.speed || 40);
+    if (e.def.flying) {
+      // pick the vertical direction with room to move, preferring the target's side
+      const p = this.nearestPlayer(e.x, e.y);
+      const upFree = !this.rectSolid(e.x, e.y - 20, e.w, e.h);
+      const downFree = !this.rectSolid(e.x, e.y + 20, e.w, e.h);
+      let vy = p && p.y > e.y ? 1 : -1;
+      if (vy < 0 && !upFree) vy = 1;
+      if (vy > 0 && !downFree) vy = -1;
+      d.detour = { t: 0.9, vx: -Math.sign(e.vx || e.facing || 1) * spd * 0.5, vy: vy * spd * 1.2 };
+    } else {
+      e.facing = -(e.facing || 1);
+      if (e.onGround) e.vy = -230;
+      d.detour = { t: 0.35, vx: e.facing * spd };
     }
   }
 

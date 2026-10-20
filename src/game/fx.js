@@ -67,7 +67,8 @@ export class FX {
     this.flashes.push({ x, y, r, color, life, max: life });
   }
   text(x, y, str, opt = {}) {
-    this.texts.push({ x, y, str: String(str), vy: opt.vy ?? -50, life: opt.life ?? 0.8, max: opt.life ?? 0.8, color: opt.color || '#fff', size: opt.size || 9, outline: opt.outline || '#2a1630', pop: 0 });
+    // sizes are in world units; scaled up so numbers and callouts stay readable on phones
+    this.texts.push({ x, y, str: String(str), vy: opt.vy ?? -50, life: opt.life ?? 0.9, max: opt.life ?? 0.9, color: opt.color || '#fff', size: (opt.size || 9) * 1.35, outline: opt.outline || '#2a1630', pop: 0 });
   }
   shake(amount) {
     this.trauma = Math.min(1, this.trauma + amount);

@@ -18,6 +18,41 @@ export class Renderer {
     this.banners = [];
     this.introCard = null;
     this.supportsFilter = 'filter' in this.ctx;
+    this.cam = { x: W / 2, y: H / 2, zoom: 1, world: null };
+  }
+
+  // ------------------------------------------------------------------ CAMERA
+  // Zoomed-in camera that follows this device's hero(es). It frames every local player (zooming
+  // out if needed), shows the whole arena during the level intro, and eases between targets.
+  updateCamera(world, dt) {
+    const { cw, ch, scale } = this.view;
+    const cam = this.cam;
+    const setting = clamp(settings().camZoom ?? 1.35, 1, 1.8);
+    let ps = world.players.filter((p) => p.present && p.local);
+    if (!ps.length) ps = world.players.filter((p) => p.present);
+    let tz = setting, tx = W / 2, ty = H / 2;
+    if (world.state === 'intro' || !ps.length || setting <= 1.01) tz = 1;
+    else {
+      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+      for (const p of ps) { x0 = Math.min(x0, p.cx); x1 = Math.max(x1, p.cx); y0 = Math.min(y0, p.cy); y1 = Math.max(y1, p.cy); }
+      tx = (x0 + x1) / 2; ty = (y0 + y1) / 2 - 12;
+      if (ps.length === 1) tx += ps[0].facing * 22;
+      const fit = Math.min(cw / ((x1 - x0 + 150) * scale), ch / ((y1 - y0 + 120) * scale));
+      tz = clamp(Math.min(setting, fit), 1, setting);
+      if (world.level.type === 'boss') tz = Math.max(1, tz - 0.12); // see more of the boss's attacks
+    }
+    if (cam.world !== world) { cam.world = world; cam.zoom = 1; cam.x = W / 2; cam.y = H / 2; }
+    const k = Math.min(1, dt * 4.5);
+    cam.zoom += (tz - cam.zoom) * Math.min(1, dt * 2.5);
+    // follow; if the target wrapped around the screen edge, glide across rather than snapping
+    cam.x += (tx - cam.x) * k;
+    cam.y += (ty - cam.y) * k;
+    const cs = scale * cam.zoom;
+    const vw = cw / cs, vh = ch / cs;
+    const cx = vw >= W ? W / 2 : clamp(cam.x, vw / 2, W - vw / 2);
+    const cy = vh >= H ? H / 2 : clamp(cam.y, vh / 2, H - vh / 2);
+    cam.x = clamp(cam.x, -W, W * 2);
+    this.camView = { s: cs, ox: cw / 2 - cx * cs, oy: ch / 2 - cy * cs, vx0: cx - vw / 2, vy0: cy - vh / 2, vw, vh };
   }
   resize() {
     const dprMax = settings().quality === 'low' ? 1 : 2;
@@ -167,7 +202,7 @@ export class Renderer {
 
   // ------------------------------------------------------------------ TILES
   buildTiles(world, scaleOverride) {
-    const scale = scaleOverride || this.view.scale;
+    const scale = scaleOverride || Math.min(this.view.scale * clamp(settings().camZoom ?? 1.35, 1, 1.8), 6);
     const key = `${world.level.id}:${scale}`;
     if (!scaleOverride && this.tileKey === key) return this.tileCache;
     const c = document.createElement('canvas');
@@ -203,11 +238,13 @@ export class Renderer {
       }
       ctx.restore();
     }
-    // arena
-    const sx = world.fx.shakeX * scale, sy = world.fx.shakeY * scale;
+    // arena (through the camera)
+    this.updateCamera(world, dt);
+    const cv = this.camView;
+    const sx = world.fx.shakeX * cv.s, sy = world.fx.shakeY * cv.s;
     ctx.save();
-    ctx.translate(ox + sx, oy + sy);
-    ctx.scale(scale, scale);
+    ctx.translate(cv.ox + sx, cv.oy + sy);
+    ctx.scale(cv.s, cv.s);
     // arena backdrop panel (subtle) to separate playfield
     ctx.save();
     ctx.beginPath(); ctx.rect(-2, -40, W + 4, H + 60); ctx.clip();
@@ -229,26 +266,52 @@ export class Renderer {
     ctx.restore();
     ctx.restore();
     this.drawFrame(ctx);
+    this.drawOffscreen(ctx, world);
     this.drawHUD(ctx, world, dt, app);
   }
 
-  drawFrame(ctx) {
-    // darken letterbox areas so the arena reads as a framed stage
-    const { cw, ch, scale, ox, oy } = this.view;
+  // arrows at the screen edge pointing to enemies / teammates outside the camera view
+  drawOffscreen(ctx, world) {
+    const cv = this.camView;
+    if (cv.vw >= W - 1 && cv.vh >= H - 1) return;
+    const { cw, ch, dpr } = this.view;
+    const m = 22 * dpr;
+    const arrow = (wx, wy, col, big) => {
+      const sx = cv.ox + wx * cv.s, sy = cv.oy + wy * cv.s;
+      if (sx > 0 && sx < cw && sy > 0 && sy < ch) return;
+      const ax = clamp(sx, m, cw - m), ay = clamp(sy, m + 30 * dpr, ch - m);
+      const ang = Math.atan2(sy - ay, sx - ax);
+      const r = (big ? 11 : 8) * dpr;
+      ctx.save();
+      ctx.translate(ax, ay); ctx.rotate(ang);
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = col; ctx.strokeStyle = OL; ctx.lineWidth = 2 * dpr;
+      ctx.beginPath(); ctx.moveTo(r, 0); ctx.lineTo(-r * 0.7, -r * 0.75); ctx.lineTo(-r * 0.7, r * 0.75); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    };
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (ox > 2) {
-      for (const side of [0, 1]) {
-        const x0 = side ? ox + W * scale : 0;
-        const g = ctx.createLinearGradient(side ? x0 : ox, 0, side ? x0 + ox : 0, 0);
-        g.addColorStop(0, 'rgba(25,8,35,0.55)'); g.addColorStop(1, 'rgba(25,8,35,0.82)');
-        ctx.fillStyle = g; ctx.fillRect(x0, 0, ox, ch);
-      }
+    for (const e of world.enemies) if (!(e.spawning > 0)) arrow(e.x + e.w / 2, e.y + e.h / 2, e.def.boss ? '#ff3a5a' : '#ff8a5a', e.def.boss);
+    for (const k of world.pickups) if (k.kind === 'golden') arrow(k.x + k.w / 2, k.y + k.h / 2, '#ffe14d', true);
+    for (const p of world.players) if (p.present && !p.local) arrow(p.cx, p.cy, p.color, false);
+  }
+
+  drawFrame(ctx) {
+    // darken whatever is outside the arena (letterbox) so the stage reads as framed
+    const { cw, ch } = this.view;
+    const cv = this.camView;
+    const ax0 = cv.ox, ax1 = cv.ox + W * cv.s, ay0 = cv.oy, ay1 = cv.oy + H * cv.s;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = 'rgba(25,8,35,0.7)';
+    if (ax0 > 2) ctx.fillRect(0, 0, ax0, ch);
+    if (ax1 < cw - 2) ctx.fillRect(ax1, 0, cw - ax1, ch);
+    if (ay0 > 2) ctx.fillRect(0, 0, cw, ay0);
+    if (ay1 < ch - 2) ctx.fillRect(0, ay1, cw, ch - ay1);
+    if (ax0 > 2 || ax1 < cw - 2) {
       ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(ox, 0); ctx.lineTo(ox, ch); ctx.moveTo(ox + W * scale, 0); ctx.lineTo(ox + W * scale, ch); ctx.stroke();
-    }
-    if (oy > 2) {
-      ctx.fillStyle = 'rgba(25,8,35,0.7)';
-      ctx.fillRect(0, 0, cw, oy); ctx.fillRect(0, oy + H * scale, cw, oy + 2);
+      ctx.beginPath();
+      if (ax0 > 2) { ctx.moveTo(ax0, 0); ctx.lineTo(ax0, ch); }
+      if (ax1 < cw - 2) { ctx.moveTo(ax1, 0); ctx.lineTo(ax1, ch); }
+      ctx.stroke();
     }
   }
   wrapDraw(x, w, fn) {
@@ -492,7 +555,7 @@ export class Renderer {
         ctx.beginPath(); ctx.arc(x, by, 17, -Math.PI / 2, -Math.PI / 2 + prog * TAU); ctx.stroke();
       }
       ctx.globalAlpha = 1;
-      ctx.font = `bold 6px ${FONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
+      ctx.font = `bold 8px ${FONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
       const timerLeft = p.local ? (p.autoKind === 'timer' ? Math.ceil(p.autoRevive) : 0) : p.reviveIn || 0;
       const label = timerLeft > 0 ? `HELP! (${timerLeft})` : p.autoRevive > 0 ? 'Reviving…' : 'HELP!';
       ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.strokeText(label, x, by - 18); ctx.fillText(label, x, by - 18);
@@ -546,8 +609,8 @@ export class Renderer {
       if (multi && !p.down) {
         ctx.fillStyle = p.color; ctx.strokeStyle = OL; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x - 3.5, y - 1); ctx.lineTo(x + 3.5, y - 1); ctx.lineTo(x, y + 3); ctx.closePath(); ctx.fill(); ctx.stroke();
-        ctx.font = `800 6px ${FONT}`; ctx.textAlign = 'center';
-        ctx.lineWidth = 2; ctx.strokeText(p.name, x, y - 3); ctx.fillText(p.name, x, y - 3);
+        ctx.font = `800 8px ${FONT}`; ctx.textAlign = 'center';
+        ctx.lineWidth = 2.5; ctx.strokeText(p.name, x, y - 4); ctx.fillText(p.name, x, y - 4);
       }
       // offscreen indicator
       if (p.y + p.h < 0) {
@@ -743,7 +806,7 @@ export class Renderer {
   drawHUD(ctx, world, dt, app) {
     const { cw, ch, scale, ox, oy, dpr } = this.view;
     const U = Math.min(scale, ch / 288) * 1; // HUD unit ~ world unit
-    const hs = clamp(U, 1.4 * dpr, 4 * dpr);
+    const hs = clamp(U * 1.3, 1.9 * dpr, 5 * dpr); // HUD unit: large, readable on phones
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const pad = 6 * hs;
