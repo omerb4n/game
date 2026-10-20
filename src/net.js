@@ -1,6 +1,7 @@
 // Networking: host-authoritative star topology over WebRTC (PeerJS), an MQTT relay fallback,
 // or BroadcastChannel (testing).
 import { uid } from './util.js';
+import { RELAY_URL } from './config.js';
 
 const PREFIX = 'pastrypaladins-v1-';
 // Optional self-hosted PeerServer: ?peerhost=example.com&peerport=443&peerpath=/
@@ -50,7 +51,13 @@ export class Session {
   _dispatch(msg, from) {
     if (!msg || !msg.type) return;
     if (msg.type === '__ping') { this.sendTo(from, { type: '__pong', t: msg.t }); return; }
-    if (msg.type === '__pong') { this.stats.rtt = this.stats.rtt * 0.8 + (performance.now() - msg.t) * 0.2; return; }
+    if (msg.type === '__pong') {
+      const rtt = performance.now() - msg.t;
+      this.stats.rtt = this.stats.rtt ? this.stats.rtt * 0.7 + rtt * 0.3 : rtt;
+      const p = this.peers.get(from);
+      if (p) p.rtt = p.rtt ? p.rtt * 0.7 + rtt * 0.3 : rtt;
+      return;
+    }
     const p = this.peers.get(from);
     if (p) p.lastSeen = performance.now();
     const h = this.handlers[msg.type];
@@ -64,6 +71,13 @@ export class Session {
   send(msg) { // client -> host
     if (this.role === 'client') this.sendTo('host', msg);
   }
+  // client -> host, and (when the transport supports it) straight to the other clients too
+  sendShared(msg) {
+    if (this.role !== 'client') return;
+    if (this._cfShared) this._cfShared(msg);
+    else this.send(msg);
+  }
+  peerInfo(id) { const p = this.peers.get(id); return p ? { rtt: p.rtt || 0, via: p.via || '' } : null; }
   broadcast(msg, except) {
     for (const [id, p] of this.peers) if (id !== except) { try { p.send(msg); } catch (e) { /* ignore */ } }
   }
@@ -161,6 +175,7 @@ async function startRelayHost(s) {
         if (!s.peers.has(from)) {
           s._addPeer(from, (msg) => c.publish(topicClient(s.code, from), JSON.stringify(msg)), () => {});
           s.peers.get(from).relay = true;
+          s.peers.get(from).via = 'relay';
           s.onPeerJoin?.(from);
         }
         c.publish(topicClient(s.code, from), JSON.stringify({ type: '__welcome' }));
@@ -211,12 +226,85 @@ async function joinRelay(s, onStatus) {
   return false;
 }
 
-// ---------------------------------------------------------------- Hosting (WebRTC + relay)
+// ---------------------------------------------------------------- Cloudflare relay (Worker + Durable Object)
+// Preferred transport when configured: a WebSocket to a room server at the nearest Cloudflare edge.
+const CF_URL = (new URLSearchParams(location.search).get('cf') || RELAY_URL || '').replace(/\/$/, '');
+function cfSocket(code, role, id) {
+  return new WebSocket(`${CF_URL}/room/${code}?role=${role}&id=${encodeURIComponent(id)}`);
+}
+
+async function startCfHost(s) {
+  if (!CF_URL) return false;
+  return new Promise((resolve) => {
+    let ws;
+    try { ws = cfSocket(s.code, 'host', 'host'); } catch (e) { resolve(false); return; }
+    let opened = false;
+    const t = setTimeout(() => { if (!opened) { try { ws.close(); } catch (e) { /* ignore */ } resolve(false); } }, 5000);
+    ws.onopen = () => { opened = true; clearTimeout(t); s._cf = ws; resolve(true); };
+    ws.onerror = () => { if (!opened) { clearTimeout(t); resolve(false); } };
+    ws.onclose = () => {
+      if (s._cf !== ws) return;
+      s._cf = null;
+      for (const [id, p] of s.peers) if (p.via === 'cloudflare') s._dropPeer(id);
+      // try to reconnect the room so new joins keep working
+      if (!s.closed) setTimeout(() => { if (!s.closed) startCfHost(s); }, 1500);
+    };
+    ws.onmessage = (ev) => {
+      let m;
+      try { m = JSON.parse(ev.data); } catch (e) { return; }
+      const from = m.f;
+      if (!from || !m.d) return;
+      if (m.d.type === '__hello') {
+        if (!s.peers.has(from)) {
+          s._addPeer(from, (msg) => { if (ws.readyState === 1) ws.send(JSON.stringify({ t: from, d: msg })); }, () => {});
+          s.peers.get(from).via = 'cloudflare';
+          s.peers.get(from).relay = true;
+          s.onPeerJoin?.(from);
+        }
+        return;
+      }
+      if (m.d.type === '__bye') { s._dropPeer(from); return; }
+      if (s.peers.has(from)) s._dispatch(m.d, from);
+    };
+  });
+}
+
+async function joinCf(s) {
+  if (!CF_URL) return false;
+  return new Promise((resolve) => {
+    let ws, done = false;
+    const finish = (v) => { if (!done) { done = true; resolve(v); } };
+    try { ws = cfSocket(s.code, 'client', s.myId); } catch (e) { finish(false); return; }
+    const t = setTimeout(() => { try { ws.close(); } catch (e) { /* ignore */ } finish(false); }, 5000);
+    ws.onerror = () => { clearTimeout(t); finish(false); };
+    ws.onclose = () => { clearTimeout(t); if (!done) finish(false); else if (s.peers.has('host')) s._dropPeer('host'); };
+    ws.onmessage = (ev) => {
+      let m;
+      try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (m.type === '__nohost') { clearTimeout(t); finish(false); return; }
+      if (m.type === '__welcome') {
+        clearTimeout(t);
+        s._cf = ws;
+        s._addPeer('host', (msg) => { if (ws.readyState === 1) ws.send(JSON.stringify({ d: msg })); }, () => { try { ws.close(); } catch (e) { /* ignore */ } });
+        s._cfShared = (msg) => { if (ws.readyState === 1) ws.send(JSON.stringify({ d: msg, b: 1 })); };
+        s.transport = 'cloudflare';
+        finish(true);
+        return;
+      }
+      if (m.type === '__hostleft') { s._dropPeer('host'); return; }
+      if (m._from) { s._dispatch(m, m._from); return; } // another player's movement, sent directly
+      if (s.peers.has('host')) s._dispatch(m, 'host');
+    };
+  });
+}
+
+// ---------------------------------------------------------------- Hosting (Cloudflare + WebRTC + relay)
 export async function hostSession(code, useBC = false, attempt = 0) {
   if (useBC) return hostBC(code);
   let s;
   try {
     s = await hostPeer(code);
+    await startCfHost(s);
   } catch (e) {
     // room code collision: retry with a fresh code
     if (e.code === 'taken' && attempt < 3) {
@@ -228,10 +316,14 @@ export async function hostSession(code, useBC = false, attempt = 0) {
     // matchmaking server unreachable: host through the relay only
     s = new Session('host');
     s.code = code;
-    s._closeTransport = () => { for (const c of s._relays || []) { try { c.end(true); } catch (x) { /* ignore */ } } };
+    s._closeTransport = () => {
+      for (const c of s._relays || []) { try { c.end(true); } catch (x) { /* ignore */ } }
+      try { s._cf?.close(); } catch (x) { /* ignore */ }
+    };
     s.startHeartbeat();
+    const cf = await startCfHost(s);
     const n = await startRelayHost(s);
-    if (!n) { s.close(); throw e; }
+    if (!n && !cf) { s.close(); throw e; }
     return s;
   }
   await startRelayHost(s);
@@ -248,6 +340,7 @@ async function hostPeer(code) {
     s._closeTransport = () => {
       try { peer.destroy(); } catch (e) { /* ignore */ }
       for (const c of s._relays || []) { try { c.end(true); } catch (e) { /* ignore */ } }
+      try { s._cf?.close(); } catch (e) { /* ignore */ }
     };
     peer.on('open', () => { opened = true; s.startHeartbeat(); resolve(s); });
     peer.on('error', (err) => {
@@ -263,6 +356,7 @@ async function hostPeer(code) {
       const id = conn.peer;
       conn.on('open', () => {
         s._addPeer(id, (m) => conn.send(m), () => conn.close());
+        s.peers.get(id).via = 'direct';
         s.onPeerJoin?.(id);
       });
       conn.on('data', (d) => s._dispatch(d, id));
@@ -282,8 +376,13 @@ export async function joinSession(code, useBC = false, onStatus) {
   const closeAll = () => {
     try { s._peer?.destroy(); } catch (e) { /* ignore */ }
     for (const c of s._relays || []) { try { c.end(true); } catch (e) { /* ignore */ } }
+    try { s._cf?.close(); } catch (e) { /* ignore */ }
   };
   s._closeTransport = closeAll;
+  if (CF_URL) {
+    onStatus?.('Connecting through the fast relay…');
+    if (await joinCf(s)) { s.startHeartbeat(); return s; }
+  }
   onStatus?.('Connecting directly…');
   let direct = false;
   try { direct = await joinDirect(s, code); } catch (e) { direct = false; }

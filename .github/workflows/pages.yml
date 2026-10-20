@@ -22,6 +22,32 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+
+      # Optional: deploy the Cloudflare room relay (worker/) and point the game at it.
+      # Needs repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID; skipped without them.
+      # A repository variable RELAY_URL (wss://...) overrides the detected URL, e.g. for a custom domain.
+      - name: Deploy Cloudflare relay
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RELAY_URL_OVERRIDE: ${{ vars.RELAY_URL }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::notice::No CLOUDFLARE_API_TOKEN secret - skipping the Cloudflare relay (WebRTC + public relays only)."
+            exit 0
+          fi
+          cd worker
+          npx --yes wrangler@3.99.0 deploy 2>&1 | tee /tmp/wrangler-deploy.log
+          URL=$(grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' /tmp/wrangler-deploy.log | head -1)
+          WS="${RELAY_URL_OVERRIDE}"
+          if [ -z "$WS" ] && [ -n "$URL" ]; then WS="wss://${URL#https://}"; fi
+          if [ -z "$WS" ]; then
+            echo "::error::Relay deployed but its workers.dev URL was not found in the output. Set a RELAY_URL repository variable (wss://...)."
+            exit 1
+          fi
+          echo "export const RELAY_URL = '$WS';" > ../src/config.js
+          echo "::notice::Game will use relay $WS"
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
