@@ -14,7 +14,11 @@ Open `index.html` through any static web server (see below). On a phone, add it 
 2. Friends scan the **QR code**, open the **invite link**, or enter the **5-letter room code**.
 3. Pick heroes, choose a mode, and tap **Let's Bake!**
 
-The connection is peer-to-peer over WebRTC, using the free PeerJS matchmaking server and its TURN fallback.
+Friends can be anywhere: different Wi-Fi networks or mobile data.
+The game first tries a direct peer-to-peer WebRTC link (via the free PeerJS matchmaking server).
+If the network blocks that, as some mobile carriers and strict routers do, it switches automatically to a relay.
+The relay sends game messages through a public MQTT broker over secure WebSockets.
+Joining shows "switching to relay…" when this happens.
 To use your own [PeerServer](https://github.com/peers/peerjs-server), add `?peerhost=your.host&peerport=443&peerpath=/` to the URL.
 Invite links carry these parameters along automatically.
 
@@ -79,6 +83,7 @@ npx http-server -p 8080 .
 ```
 For testing online play on one machine, open two tabs with `?net=bc`. This uses a BroadcastChannel transport instead of WebRTC.
 Add `&lag=150` to simulate 150 ms of network latency with jitter.
+`?relay=wss://your-broker/mqtt` overrides the relay brokers (comma-separated list).
 
 ## Deploy
 The included GitHub Action (`.github/workflows/pages.yml`) publishes the game to GitHub Pages on every push to `main`.
@@ -97,5 +102,5 @@ src/data/*.js        heroes (+kits & drawing), enemies & bosses, levels, perks &
 src/audio.js         synthesized SFX + generative music
 src/input.js         keyboard schemes, gamepads, multi-touch controls
 src/net.js           PeerJS / BroadcastChannel sessions
-vendor/              PeerJS 1.5.4, qrcode-generator 1.4.4 (MIT)
+vendor/              PeerJS 1.5.4, MQTT.js 5.10.1, qrcode-generator 1.4.4 (MIT)
 ```
