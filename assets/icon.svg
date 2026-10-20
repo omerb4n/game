@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="70%"><stop offset="0" stop-color="#ffb3d6"/><stop offset="1" stop-color="#7a3dff"/></radialGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c98a4b"/><stop offset="1" stop-color="#8a5228"/></linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#bg)"/>
+  <path d="M30 70 L98 70 L88 110 L40 110 Z" fill="#ff5a7a" stroke="#2b1630" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M52 72 L54 108 M64 72 L64 108 M76 72 L74 108" stroke="#d63a5a" stroke-width="4"/>
+  <path d="M24 72 C24 36 104 36 104 72 Z" fill="url(#top)" stroke="#2b1630" stroke-width="5" stroke-linejoin="round"/>
+  <ellipse cx="50" cy="52" rx="10" ry="5" fill="#e8b47a" transform="rotate(-20 50 52)"/>
+  <circle cx="54" cy="64" r="5" fill="#fff"/><circle cx="74" cy="64" r="5" fill="#fff"/>
+  <circle cx="55" cy="65" r="2.6" fill="#2b1630"/><circle cx="75" cy="65" r="2.6" fill="#2b1630"/>
+  <path d="M30 40 L44 18 L52 34 L64 12 L76 34 L84 18 L98 40 Z" fill="#ffd34d" stroke="#2b1630" stroke-width="5" stroke-linejoin="round"/>
+  <circle cx="64" cy="30" r="4" fill="#4da6ff"/>
+</svg>
