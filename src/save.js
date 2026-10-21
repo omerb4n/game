@@ -10,7 +10,8 @@ const defaults = () => ({
     shake: 1,
     haptics: true,
     damageNumbers: true,
-    quality: 'high', // 'low' | 'high'
+    quality: 'auto', // 'low' | 'auto' (adapts resolution / frame cap to the device) | 'high'
+    qv: 2,
     showFps: false,
     touchSize: 1,
     touchOpacity: 0.55,
@@ -52,7 +53,12 @@ function deepMerge(base, over) {
 export function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) data = deepMerge(defaults(), JSON.parse(raw));
+    if (raw) {
+      const saved = JSON.parse(raw);
+      // v1 saves stored the old default 'high'; move them to the adaptive default
+      if (saved.settings && !saved.settings.qv) { if (saved.settings.quality === 'high') saved.settings.quality = 'auto'; saved.settings.qv = 2; }
+      data = deepMerge(defaults(), saved);
+    }
   } catch (e) {
     data = defaults();
   }

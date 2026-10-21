@@ -124,6 +124,17 @@ Csikszentmihalyi's *flow* channel means keeping challenge in step with growing s
 | Hit-stop | 25 ms on normal hits, 60 ms on heavy hits and crits, 70 ms when you get hit |
 | Invulnerability | 1.1 s after a hit (more with *Thick Crust*) |
 
+### Phone performance
+Phones are usually limited by pixel fill and compositing, not by JavaScript; the per-frame script cost is about 1 ms on a desktop.
+- **Frame governor (`src/perf.js`).** On the default *Auto* graphics setting it watches real frame intervals during play.
+  - When more than 10% of frames miss vsync, it first caps rendering at 60 fps on 120 Hz screens. The sim runs at 60 Hz, and a steady 60 looks smoother than a stuttering 120.
+  - If frames are still missed, it lowers the canvas resolution in steps: 2× → 1.75× → 1.5× → 1.3× → 1.1×.
+  - It steps back up after a long stretch of headroom, and stops retrying a step that has failed twice.
+  - What it learns is remembered per device.
+- **Opaque canvas** (`alpha: false`), which phones composite more cheaply.
+- **No `ctx.filter`:** the enemy hit flash is drawn through a small scratch canvas instead.
+- **Light touch HUD:** it writes to the DOM only when a value changes, caches button rects (no layout reads on each touch), moves the stick with transforms, and animates the "special ready" glow with opacity only.
+
 ## 6. Online architecture
 Mobile co-op means every friend is on their own phone. Room codes run over WebRTC (PeerJS).
 - **Host-authoritative world**: the host simulates enemies, spawns, pickups, objectives, and score. It broadcasts 20 Hz snapshots.
