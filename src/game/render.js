@@ -1,5 +1,5 @@
 // Rendering: backgrounds, tiles, entities, lighting, HUD.
-import { TILE, COLS, ROWS, W, H, TAU, rng, rrect, star, heart, drawMuffin, clamp, shade, rgba, fmtTime, ease, wrapDx } from '../util.js';
+import { TILE, COLS, ROWS, W, H, TAU, rng, rrect, star, heart, drawMuffin, clamp, shade, rgba, fmtTime, ease } from '../util.js';
 import { drawHero, OL, PLAYER_COLORS } from '../data/heroes.js';
 import { T_GROUND, T_ALT, T_ONEWAY, T_SPIKE, T_SPRING, T_ICE, T_LAVA } from './world.js';
 import { settings } from '../save.js';
@@ -7,10 +7,11 @@ import { settings } from '../save.js';
 const isSolid = (t) => t === T_GROUND || t === T_ALT || t === T_ICE;
 const FONT = 'Fredoka, "Trebuchet MS", sans-serif';
 
-// true when some row is open at both side edges, i.e. heroes can run off one side and appear on the other
-function arenaWraps(tiles) {
-  for (let r = 0; r < ROWS - 1; r++) if (!isSolid(tiles[r * COLS]) && !isSolid(tiles[r * COLS + COLS - 1])) return true;
-  return false;
+// rows open at both side edges, i.e. where heroes can run off one side and come back on the other
+function wrapRows(tiles) {
+  const rows = [];
+  for (let r = 0; r < ROWS - 1; r++) if (!isSolid(tiles[r * COLS]) && !isSolid(tiles[r * COLS + COLS - 1])) rows.push(r);
+  return rows;
 }
 
 export class Renderer {
@@ -33,9 +34,8 @@ export class Renderer {
   // Zoomed-in camera that follows this device's hero(es). It frames every local player (zooming
   // out if needed) and shows the whole arena during the level intro. Motion uses critically damped
   // springs (no jerks when the target changes), a look-ahead that eases in, and a vertical "floor
-  // lock" so small hops don't bob the view. On arenas that wrap left/right the camera position is
-  // unwrapped: it keeps panning past the edge and the arena is drawn tiled, so crossing the seam
-  // is one seamless pan instead of a glide back across the whole map.
+  // lock" so small hops don't bob the view. The camera stays inside the arena so its edges read
+  // clearly; when the followed hero wraps to the other side it does a quick eased swoop across.
   updateCamera(world, dt) {
     const { cw, ch, scale } = this.view;
     const cam = this.cam;
@@ -45,22 +45,15 @@ export class Renderer {
     if (!ps.length) ps = world.players.filter((p) => p.present);
     if (cam.world !== world) {
       cam.world = world; cam.zoom = 1; cam.x = W / 2; cam.y = H / 2;
-      cam.vx = 0; cam.vy = 0; cam.lead = 0; cam.floorY = null;
-      cam.wraps = arenaWraps(world.tiles);
+      cam.vx = 0; cam.vy = 0; cam.lead = 0; cam.floorY = null; cam.swoop = 0; cam.lastTx = null;
+      this.wrapRows = wrapRows(world.tiles);
     }
-    const wraps = cam.wraps;
     let tz = setting, tx = W / 2, ty = H / 2, follow = false;
     if (world.state === 'intro' || !ps.length || setting <= 1.01) tz = 1;
     else {
       follow = true;
-      // unwrap positions around the camera so teammates on either side of the seam count as close
-      const ux = (x) => (wraps ? cam.x + wrapDx(cam.x, x) : x);
-      const ax = ux(ps[0].cx);
       let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
-      for (const p of ps) {
-        const px = wraps ? ax + wrapDx(ax, p.cx) : p.cx;
-        x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, p.cy); y1 = Math.max(y1, p.cy);
-      }
+      for (const p of ps) { x0 = Math.min(x0, p.cx); x1 = Math.max(x1, p.cx); y0 = Math.min(y0, p.cy); y1 = Math.max(y1, p.cy); }
       tx = (x0 + x1) / 2;
       if (ps.length === 1) {
         const p = ps[0];
@@ -88,23 +81,21 @@ export class Renderer {
       vel = (vel - w * tmp) * e;
       return [target + (c + tmp) * e, vel];
     };
-    if (!follow) { tx = W / 2; if (wraps) tx = cam.x + wrapDx(cam.x, W / 2); }
-    [cam.x, cam.vx] = spring(cam.x, cam.vx, tx, follow ? 0.2 : 0.35);
-    [cam.y, cam.vy] = spring(cam.y, cam.vy, ty, follow ? 0.28 : 0.35);
-    let cs = scale * cam.zoom;
-    if (wraps) cs = Math.round(W * cs) / W; // whole-pixel arena width so tiled copies meet without a hairline
+    if (!follow) tx = W / 2;
+    const cs = scale * cam.zoom;
     const vw = cw / cs, vh = ch / cs;
-    let cx;
-    if (vw >= W) { cx = W / 2; if (wraps) cam.x = W / 2 + Math.round((cam.x - W / 2) / W) * W; }
-    else if (wraps) {
-      // keep the unwrapped camera near [0, W); shifting by exactly W is invisible (the arena is tiled)
-      if (cam.x < 0) cam.x += W; else if (cam.x >= W) cam.x -= W;
-      cx = cam.x;
-    } else cx = cam.x = clamp(cam.x, vw / 2, W - vw / 2);
+    // clamp the target (not just the view) so the spring never winds up against an edge
+    if (vw < W) tx = clamp(tx, vw / 2, W - vw / 2);
+    // the hero ran off one side and came back on the other: swoop across quickly instead of a slow glide
+    if (follow && cam.lastTx != null && Math.abs(tx - cam.lastTx) > W * 0.4) { cam.swoop = 0.6; cam.vx = 0; }
+    cam.lastTx = follow ? tx : null;
+    cam.swoop = Math.max(0, cam.swoop - dt);
+    [cam.x, cam.vx] = spring(cam.x, cam.vx, tx, cam.swoop > 0 ? 0.11 : follow ? 0.2 : 0.35);
+    [cam.y, cam.vy] = spring(cam.y, cam.vy, ty, follow ? 0.28 : 0.35);
+    const cx = vw >= W ? W / 2 : (cam.x = clamp(cam.x, vw / 2, W - vw / 2));
     const cy = vh >= H ? H / 2 : clamp(cam.y, vh / 2, H - vh / 2);
     if (cy !== cam.y && Math.sign(cam.vy) === Math.sign(cam.y - cy)) cam.vy = 0;
-    const tiled = wraps && vw < W;
-    this.camView = { s: cs, ox: tiled ? Math.round(cw / 2 - cx * cs) : cw / 2 - cx * cs, oy: ch / 2 - cy * cs, vx0: cx - vw / 2, vy0: cy - vh / 2, vw, vh, cx, tiled };
+    this.camView = { s: cs, ox: cw / 2 - cx * cs, oy: ch / 2 - cy * cs, vx0: cx - vw / 2, vy0: cy - vh / 2, vw, vh, cx };
   }
   resize() {
     const q = settings().quality;
@@ -294,30 +285,23 @@ export class Renderer {
     // arena (through the camera)
     this.updateCamera(world, dt);
     const cv = this.camView;
-    const sx = cv.tiled ? Math.round(world.fx.shakeX * cv.s) : world.fx.shakeX * cv.s, sy = world.fx.shakeY * cv.s;
+    const sx = world.fx.shakeX * cv.s, sy = world.fx.shakeY * cv.s;
     ctx.save();
     ctx.translate(cv.ox + sx, cv.oy + sy);
     ctx.scale(cv.s, cv.s);
-    // draw the arena once, plus a tiled copy on the side the camera has panned past the wrap seam
-    const copies = [0];
-    if (cv.tiled) { if (cv.vx0 < 0) copies.push(-W); if (cv.vx0 + cv.vw > W) copies.push(W); }
-    for (const dx of copies) {
-      ctx.save();
-      ctx.translate(dx, 0);
-      this.drawArena(ctx, world, t, cv.tiled);
-      ctx.restore();
-    }
+    this.drawArena(ctx, world, t);
     ctx.restore();
     this.drawFrame(ctx);
     this.drawOffscreen(ctx, world);
     this.drawHUD(ctx, world, dt, app);
   }
 
-  drawArena(ctx, world, t, tiled) {
+  drawArena(ctx, world, t) {
     ctx.save();
-    ctx.beginPath(); if (tiled) ctx.rect(0, -40, W, H + 60); else ctx.rect(-2, -40, W + 4, H + 60); ctx.clip();
+    ctx.beginPath(); ctx.rect(-2, -40, W + 4, H + 60); ctx.clip();
     this.drawPortals(ctx, world, t);
     ctx.drawImage(this.tileCache, 0, 0, W, H);
+    this.drawWrapEdges(ctx, t);
     this.drawDynamicTiles(ctx, world, t);
     this.drawZones(ctx, world, t);
     world.fx.drawBack(ctx);
@@ -334,6 +318,29 @@ export class Renderer {
     ctx.restore();
   }
 
+  // soft glow + chevrons on open side edges: running out here brings you back on the other side
+  drawWrapEdges(ctx, t) {
+    const rows = this.wrapRows;
+    if (!rows || !rows.length || (this.camView && this.camView.vw >= W - 1)) return;
+    const a = 0.22 + 0.08 * Math.sin(t * 3);
+    for (const side of [0, 1]) {
+      const x = side ? W : 0, dir = side ? 1 : -1;
+      const g = ctx.createLinearGradient(x, 0, x - dir * 10, 0);
+      g.addColorStop(0, `rgba(255,240,180,${a})`); g.addColorStop(1, 'rgba(255,240,180,0)');
+      ctx.fillStyle = g;
+      ctx.strokeStyle = `rgba(255,255,255,${a + 0.15})`; ctx.lineWidth = 1.2;
+      for (let i = 0; i < rows.length; i++) {
+        const r0 = rows[i];
+        let r1 = r0; while (i + 1 < rows.length && rows[i + 1] === r1 + 1) r1 = rows[++i];
+        const y0 = r0 * TILE, y1 = (r1 + 1) * TILE;
+        ctx.fillRect(side ? W - 10 : 0, y0, 10, y1 - y0);
+        // chevron pointing out of the arena, in the middle of the open stretch
+        const cy = (y0 + y1) / 2, cx = side ? W - 4 : 4, o = ((t * 6) % 2) * dir * 0.6;
+        ctx.beginPath(); ctx.moveTo(cx - dir * 2 + o, cy - 3.5); ctx.lineTo(cx + dir * 1.5 + o, cy); ctx.lineTo(cx - dir * 2 + o, cy + 3.5); ctx.stroke();
+      }
+    }
+  }
+
   // arrows at the screen edge pointing to enemies / teammates outside the camera view
   drawOffscreen(ctx, world) {
     const cv = this.camView;
@@ -341,7 +348,6 @@ export class Renderer {
     const { cw, ch, dpr } = this.view;
     const m = 22 * dpr;
     const arrow = (wx, wy, col, big) => {
-      if (cv.tiled) wx = cv.cx + wrapDx(cv.cx, wx);
       const sx = cv.ox + wx * cv.s, sy = cv.oy + wy * cv.s;
       if (sx > 0 && sx < cw && sy > 0 && sy < ch) return;
       const ax = clamp(sx, m, cw - m), ay = clamp(sy, m + 30 * dpr, ch - m);
@@ -364,7 +370,7 @@ export class Renderer {
     // darken whatever is outside the arena (letterbox) so the stage reads as framed
     const { cw, ch } = this.view;
     const cv = this.camView;
-    const ax0 = cv.tiled ? 0 : cv.ox, ax1 = cv.tiled ? cw : cv.ox + W * cv.s, ay0 = cv.oy, ay1 = cv.oy + H * cv.s;
+    const ax0 = cv.ox, ax1 = cv.ox + W * cv.s, ay0 = cv.oy, ay1 = cv.oy + H * cv.s;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = 'rgba(25,8,35,0.7)';
     if (ax0 > 2) ctx.fillRect(0, 0, ax0, ch);
