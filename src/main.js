@@ -9,6 +9,7 @@ import { PERKS, perkById, rollPerks, ACHIEVEMENTS } from './data/perks.js';
 import { World } from './game/world.js';
 import { Renderer, levelThumb } from './game/render.js';
 import { MenuScene } from './menuscene.js';
+import { FrameGovernor } from './perf.js';
 import { localSession, hostSession, joinSession } from './net.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -67,6 +68,7 @@ class App {
     this.ui = $('#ui');
     this.renderer = new Renderer(this.canvas);
     this.menu = new MenuScene(this.renderer);
+    this.gov = new FrameGovernor(this.renderer);
     this.screen = '';
     this.world = null;
     this.session = localSession();
@@ -120,6 +122,15 @@ class App {
 
   // =============================================================== LOOP
   frame(now) {
+    const raw = now - (this.rafPrev ?? now);
+    this.rafPrev = now;
+    const playing = !!this.world && this.screen === 'game';
+    if (this.gov.shouldSkip(now - this.last)) {
+      this.gov.tick(raw, 0, playing);
+      requestAnimationFrame((t) => this.frame(t));
+      return;
+    }
+    this.gov.tick(raw, now - this.last, playing);
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     this.fpsT += dt; this.fpsN++;
@@ -151,7 +162,7 @@ class App {
       const ctx = this.renderer.ctx;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.font = '600 12px Fredoka, sans-serif'; ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
-      ctx.fillText(`${this.fps} fps`, 8, this.renderer.view.ch - 8);
+      ctx.fillText(`${this.fps} fps · ${this.gov.label()}`, 8, this.renderer.view.ch - 8);
     }
     requestAnimationFrame((t) => this.frame(t));
   }
@@ -1283,7 +1294,7 @@ class App {
           <h3>Display</h3>
           ${slider('camZoom', 'Camera zoom', 1, 1.7, 0.05)}
           ${slider('shake', 'Screen shake', 0, 1.5, 0.05)}
-          ${choice('quality', 'Graphics', [['low', 'Battery saver'], ['high', 'Beautiful']])}
+          ${choice('quality', 'Graphics', [['low', 'Battery saver'], ['auto', 'Auto'], ['high', 'Max']])}
           ${toggle('reduceFlashes', 'Reduce flashes')}
           ${toggle('showFps', 'Show FPS / ping')}
           ${toggle('autoFullscreen', 'Auto fullscreen', 'Go fullscreen on phones when you tap or start a level')}

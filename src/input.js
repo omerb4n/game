@@ -213,10 +213,12 @@ class TouchControls {
     el.addEventListener('touchmove', (e) => this.onMove(e), opts);
     el.addEventListener('touchend', (e) => this.onEnd(e), opts);
     el.addEventListener('touchcancel', (e) => this.onEnd(e), opts);
+    window.addEventListener('resize', () => { this.rects = null; });
     this.applyLayout();
   }
   applyLayout() {
     if (!this.el) return;
+    this.rects = null;
     const s = settings();
     this.el.style.setProperty('--tsize', s.touchSize);
     this.el.style.setProperty('--topa', s.touchOpacity);
@@ -225,6 +227,7 @@ class TouchControls {
   show(v) {
     this.enabled = v;
     if (this.el) this.el.classList.toggle('on', v);
+    this.rects = null;
     if (!v) this.reset();
   }
   reset() {
@@ -236,8 +239,11 @@ class TouchControls {
   // off-centre thumbs still register. Pause keeps a tight hit area to avoid accidental pauses.
   btnAt(x, y) {
     let best = null, bd = 1e9;
+    // button rects are measured once per layout; reading them on every touch would force a style/layout pass
+    if (!this.rects) { this.rects = {}; for (const n in this.buttons) this.rects[n] = this.buttons[n].el.getBoundingClientRect(); }
     for (const name in this.buttons) {
-      const r = this.buttons[name].el.getBoundingClientRect();
+      const r = this.rects[name];
+      if (!r.width) { this.rects = null; continue; }
       const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
       const rad = (r.width / 2) * (name === 'pause' ? 1.15 : 1.45);
       const d = Math.hypot(x - cx, y - cy);
@@ -264,8 +270,7 @@ class TouchControls {
         this.stick.id = t.identifier;
         this.stick.ox = t.clientX; this.stick.oy = t.clientY;
         this.stick.x = 0; this.stick.y = 0;
-        this.stickEl.style.left = t.clientX + 'px';
-        this.stickEl.style.top = t.clientY + 'px';
+        this.placeStick(t.clientX, t.clientY);
         this.stickEl.classList.remove('hidden');
         this.knobEl.style.transform = 'translate(-50%,-50%)';
         this.hintEl.classList.add('gone');
@@ -284,8 +289,7 @@ class TouchControls {
           const ex = (d - R) / d;
           this.stick.ox += dx * ex; this.stick.oy += dy * ex;
           dx -= dx * ex; dy -= dy * ex;
-          this.stickEl.style.left = this.stick.ox + 'px';
-          this.stickEl.style.top = this.stick.oy + 'px';
+          this.placeStick(this.stick.ox, this.stick.oy);
         }
         this.stick.x = dx / R; this.stick.y = dy / R;
         this.knobEl.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
@@ -331,15 +335,26 @@ class TouchControls {
     for (const b of BTN) { latch[b] = this.buttons[b].latch; this.buttons[b].latch = false; }
     return { x, y, jump: this.buttons.jump.pressed, attack: this.buttons.attack.pressed, special: this.buttons.special.pressed, pause: this.buttons.pause.pressed, latch };
   }
+  // the HUD below is updated every frame, so it only touches the DOM when a value visibly changes
+  placeStick(x, y) {
+    this.stickEl.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+  }
   setCooldown(frac, ready) {
     if (!this.cdCircle) return;
     const c = 2 * Math.PI * 46;
-    this.cdCircle.style.strokeDasharray = `${c}`;
-    this.cdCircle.style.strokeDashoffset = `${c * (1 - frac)}`;
-    this.buttons.special.el.classList.toggle('ready', ready);
+    const off = Math.round(c * (1 - frac));
+    if (off !== this.cdOff) {
+      if (this.cdOff === undefined) this.cdCircle.style.strokeDasharray = `${c}`;
+      this.cdOff = off;
+      this.cdCircle.style.strokeDashoffset = `${off}`;
+    }
+    if (ready !== this.cdReady) { this.cdReady = ready; this.buttons.special.el.classList.toggle('ready', ready); }
   }
   setCharge(v) {
     if (!this.chargeEl) return;
+    v = Math.round(v * 40) / 40;
+    if (v === this.chargeV) return;
+    this.chargeV = v;
     this.chargeEl.style.transform = `scale(${v})`;
     this.chargeEl.style.opacity = v > 0 ? 1 : 0;
   }

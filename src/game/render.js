@@ -16,14 +16,16 @@ function arenaWraps(tiles) {
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d');
+    // opaque canvas: every frame paints the full background, and phones composite an opaque canvas much cheaper
+    this.ctx = canvas.getContext('2d', { alpha: false });
+    this.dprCap = 2; // lowered by the frame governor in main.js when a device can't keep up
     this.view = { scale: 1, ox: 0, oy: 0, cw: 1, ch: 1, dpr: 1 };
     this.bgCache = null; this.bgKey = '';
     this.tileCache = null; this.tileKey = '';
     this.lightCanvas = document.createElement('canvas');
     this.banners = [];
     this.introCard = null;
-    this.supportsFilter = 'filter' in this.ctx;
+    this.flashCanvas = document.createElement('canvas');
     this.cam = { x: W / 2, y: H / 2, zoom: 1, world: null };
   }
 
@@ -105,7 +107,8 @@ export class Renderer {
     this.camView = { s: cs, ox: tiled ? Math.round(cw / 2 - cx * cs) : cw / 2 - cx * cs, oy: ch / 2 - cy * cs, vx0: cx - vw / 2, vy0: cy - vh / 2, vw, vh, cx, tiled };
   }
   resize() {
-    const dprMax = settings().quality === 'low' ? 1 : 2;
+    const q = settings().quality;
+    const dprMax = q === 'low' ? 1 : q === 'high' ? 2 : this.dprCap;
     const dpr = Math.min(window.devicePixelRatio || 1, dprMax);
     const cw = Math.floor(window.innerWidth * dpr), ch = Math.floor(window.innerHeight * dpr);
     this.canvas.width = cw; this.canvas.height = ch;
@@ -555,14 +558,8 @@ export class Renderer {
       const k = 1 - clamp(e.spawning / 0.35, 0, 1);
       ctx.translate(cx, cy); ctx.scale(k, k); ctx.translate(-cx, -cy);
     }
-    const flashing = e.flash > 0;
-    if (flashing && this.supportsFilter) ctx.filter = 'brightness(2.6) saturate(0.4)';
-    e.def.draw(ctx, e, t);
-    if (flashing && this.supportsFilter) ctx.filter = 'none';
-    if (flashing && !this.supportsFilter) {
-      ctx.globalAlpha = 0.6; ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.ellipse(cx, cy, e.w / 2, e.h / 2, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
-    }
+    if (e.flash > 0) this.drawFlashing(ctx, e, t);
+    else e.def.draw(ctx, e, t);
     if (e.frozen > 0) {
       ctx.globalAlpha = 0.6;
       const g = ctx.createLinearGradient(e.x, e.y, e.x + e.w, e.y + e.h);
@@ -594,6 +591,30 @@ export class Renderer {
       ctx.fillStyle = e.enraged ? '#ff5a3a' : '#7dff8a'; ctx.fillRect(cx - w / 2, e.y - 5, (w * Math.max(0, e.hp)) / e.maxHp, 2.5);
     }
     ctx.restore();
+  }
+
+  // hit flash: draw the enemy into a scratch canvas, wash it white there, then stamp it into the scene.
+  // (ctx.filter does the same in one line but is very slow on phone GPUs)
+  drawFlashing(ctx, e, t) {
+    const s = Math.min(this.camView?.s || 2, 4);
+    const m = Math.max(e.w, e.h) * 0.5 + 14;
+    const bw = e.w + m * 2, bh = e.h + m * 2;
+    const pw = Math.ceil(bw * s), ph = Math.ceil(bh * s);
+    const fc = this.flashCanvas;
+    if (fc.width < pw || fc.height < ph) { fc.width = Math.max(fc.width, pw); fc.height = Math.max(fc.height, ph); }
+    const g = fc.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = 'source-over';
+    g.clearRect(0, 0, pw + 1, ph + 1);
+    g.setTransform(s, 0, 0, s, (m - e.x) * s, (m - e.y) * s);
+    e.def.draw(g, e, t);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = 'rgba(255,255,255,0.72)';
+    g.fillRect(0, 0, pw, ph);
+    g.globalCompositeOperation = 'source-over';
+    ctx.drawImage(fc, 0, 0, pw, ph, e.x - m, e.y - m, pw / s, ph / s);
   }
 
   drawPlayer(ctx, p, world, dx) {
