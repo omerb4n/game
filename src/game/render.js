@@ -1,11 +1,17 @@
 // Rendering: backgrounds, tiles, entities, lighting, HUD.
-import { TILE, COLS, ROWS, W, H, TAU, rng, rrect, star, heart, drawMuffin, clamp, shade, rgba, fmtTime, ease } from '../util.js';
+import { TILE, COLS, ROWS, W, H, TAU, rng, rrect, star, heart, drawMuffin, clamp, shade, rgba, fmtTime, ease, wrapDx } from '../util.js';
 import { drawHero, OL, PLAYER_COLORS } from '../data/heroes.js';
 import { T_GROUND, T_ALT, T_ONEWAY, T_SPIKE, T_SPRING, T_ICE, T_LAVA } from './world.js';
 import { settings } from '../save.js';
 
 const isSolid = (t) => t === T_GROUND || t === T_ALT || t === T_ICE;
 const FONT = 'Fredoka, "Trebuchet MS", sans-serif';
+
+// true when some row is open at both side edges, i.e. heroes can run off one side and appear on the other
+function arenaWraps(tiles) {
+  for (let r = 0; r < ROWS - 1; r++) if (!isSolid(tiles[r * COLS]) && !isSolid(tiles[r * COLS + COLS - 1])) return true;
+  return false;
+}
 
 export class Renderer {
   constructor(canvas) {
@@ -23,36 +29,80 @@ export class Renderer {
 
   // ------------------------------------------------------------------ CAMERA
   // Zoomed-in camera that follows this device's hero(es). It frames every local player (zooming
-  // out if needed), shows the whole arena during the level intro, and eases between targets.
+  // out if needed) and shows the whole arena during the level intro. Motion uses critically damped
+  // springs (no jerks when the target changes), a look-ahead that eases in, and a vertical "floor
+  // lock" so small hops don't bob the view. On arenas that wrap left/right the camera position is
+  // unwrapped: it keeps panning past the edge and the arena is drawn tiled, so crossing the seam
+  // is one seamless pan instead of a glide back across the whole map.
   updateCamera(world, dt) {
     const { cw, ch, scale } = this.view;
     const cam = this.cam;
+    dt = Math.min(dt, 0.05);
     const setting = clamp(settings().camZoom ?? 1.35, 1, 1.8);
     let ps = world.players.filter((p) => p.present && p.local);
     if (!ps.length) ps = world.players.filter((p) => p.present);
-    let tz = setting, tx = W / 2, ty = H / 2;
+    if (cam.world !== world) {
+      cam.world = world; cam.zoom = 1; cam.x = W / 2; cam.y = H / 2;
+      cam.vx = 0; cam.vy = 0; cam.lead = 0; cam.floorY = null;
+      cam.wraps = arenaWraps(world.tiles);
+    }
+    const wraps = cam.wraps;
+    let tz = setting, tx = W / 2, ty = H / 2, follow = false;
     if (world.state === 'intro' || !ps.length || setting <= 1.01) tz = 1;
     else {
+      follow = true;
+      // unwrap positions around the camera so teammates on either side of the seam count as close
+      const ux = (x) => (wraps ? cam.x + wrapDx(cam.x, x) : x);
+      const ax = ux(ps[0].cx);
       let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
-      for (const p of ps) { x0 = Math.min(x0, p.cx); x1 = Math.max(x1, p.cx); y0 = Math.min(y0, p.cy); y1 = Math.max(y1, p.cy); }
-      tx = (x0 + x1) / 2; ty = (y0 + y1) / 2 - 12;
-      if (ps.length === 1) tx += ps[0].facing * 22;
+      for (const p of ps) {
+        const px = wraps ? ax + wrapDx(ax, p.cx) : p.cx;
+        x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, p.cy); y1 = Math.max(y1, p.cy);
+      }
+      tx = (x0 + x1) / 2;
+      if (ps.length === 1) {
+        const p = ps[0];
+        // look-ahead toward where the hero is heading; eased so turning around doesn't jerk the view
+        const want = clamp(p.facing * 18 + (p.vx || 0) * 0.22, -44, 44);
+        cam.lead += (want - cam.lead) * Math.min(1, dt * 1.8);
+        tx += cam.lead;
+        // vertical: track the floor the hero stands on; only chase mid-air when far from it
+        const feet = p.y + p.h;
+        if (cam.floorY == null || p.down || p.onGround || Math.abs(feet - cam.floorY) > 56 || (p.vy > 0 && feet > cam.floorY + 8)) cam.floorY = feet;
+        ty = cam.floorY - 30;
+      } else {
+        cam.lead *= Math.max(0, 1 - dt * 3);
+        ty = (y0 + y1) / 2 - 12;
+      }
       const fit = Math.min(cw / ((x1 - x0 + 150) * scale), ch / ((y1 - y0 + 120) * scale));
       tz = clamp(Math.min(setting, fit), 1, setting);
       if (world.level.type === 'boss') tz = Math.max(1, tz - 0.12); // see more of the boss's attacks
     }
-    if (cam.world !== world) { cam.world = world; cam.zoom = 1; cam.x = W / 2; cam.y = H / 2; }
-    const k = Math.min(1, dt * 4.5);
     cam.zoom += (tz - cam.zoom) * Math.min(1, dt * 2.5);
-    // follow; if the target wrapped around the screen edge, glide across rather than snapping
-    cam.x += (tx - cam.x) * k;
-    cam.y += (ty - cam.y) * k;
-    const cs = scale * cam.zoom;
+    // critically damped spring (smoothTime ~0.2s horizontally, a bit softer vertically)
+    const spring = (pos, vel, target, st) => {
+      const w = 2 / st, x = w * dt, e = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+      const c = pos - target, tmp = (vel + w * c) * dt;
+      vel = (vel - w * tmp) * e;
+      return [target + (c + tmp) * e, vel];
+    };
+    if (!follow) { tx = W / 2; if (wraps) tx = cam.x + wrapDx(cam.x, W / 2); }
+    [cam.x, cam.vx] = spring(cam.x, cam.vx, tx, follow ? 0.2 : 0.35);
+    [cam.y, cam.vy] = spring(cam.y, cam.vy, ty, follow ? 0.28 : 0.35);
+    let cs = scale * cam.zoom;
+    if (wraps) cs = Math.round(W * cs) / W; // whole-pixel arena width so tiled copies meet without a hairline
     const vw = cw / cs, vh = ch / cs;
-    const cx = vw >= W ? W / 2 : clamp(cam.x, vw / 2, W - vw / 2);
+    let cx;
+    if (vw >= W) { cx = W / 2; if (wraps) cam.x = W / 2 + Math.round((cam.x - W / 2) / W) * W; }
+    else if (wraps) {
+      // keep the unwrapped camera near [0, W); shifting by exactly W is invisible (the arena is tiled)
+      if (cam.x < 0) cam.x += W; else if (cam.x >= W) cam.x -= W;
+      cx = cam.x;
+    } else cx = cam.x = clamp(cam.x, vw / 2, W - vw / 2);
     const cy = vh >= H ? H / 2 : clamp(cam.y, vh / 2, H - vh / 2);
-    cam.x = clamp(cam.x, -W, W * 2);
-    this.camView = { s: cs, ox: cw / 2 - cx * cs, oy: ch / 2 - cy * cs, vx0: cx - vw / 2, vy0: cy - vh / 2, vw, vh };
+    if (cy !== cam.y && Math.sign(cam.vy) === Math.sign(cam.y - cy)) cam.vy = 0;
+    const tiled = wraps && vw < W;
+    this.camView = { s: cs, ox: tiled ? Math.round(cw / 2 - cx * cs) : cw / 2 - cx * cs, oy: ch / 2 - cy * cs, vx0: cx - vw / 2, vy0: cy - vh / 2, vw, vh, cx, tiled };
   }
   resize() {
     const dprMax = settings().quality === 'low' ? 1 : 2;
@@ -241,13 +291,28 @@ export class Renderer {
     // arena (through the camera)
     this.updateCamera(world, dt);
     const cv = this.camView;
-    const sx = world.fx.shakeX * cv.s, sy = world.fx.shakeY * cv.s;
+    const sx = cv.tiled ? Math.round(world.fx.shakeX * cv.s) : world.fx.shakeX * cv.s, sy = world.fx.shakeY * cv.s;
     ctx.save();
     ctx.translate(cv.ox + sx, cv.oy + sy);
     ctx.scale(cv.s, cv.s);
-    // arena backdrop panel (subtle) to separate playfield
+    // draw the arena once, plus a tiled copy on the side the camera has panned past the wrap seam
+    const copies = [0];
+    if (cv.tiled) { if (cv.vx0 < 0) copies.push(-W); if (cv.vx0 + cv.vw > W) copies.push(W); }
+    for (const dx of copies) {
+      ctx.save();
+      ctx.translate(dx, 0);
+      this.drawArena(ctx, world, t, cv.tiled);
+      ctx.restore();
+    }
+    ctx.restore();
+    this.drawFrame(ctx);
+    this.drawOffscreen(ctx, world);
+    this.drawHUD(ctx, world, dt, app);
+  }
+
+  drawArena(ctx, world, t, tiled) {
     ctx.save();
-    ctx.beginPath(); ctx.rect(-2, -40, W + 4, H + 60); ctx.clip();
+    ctx.beginPath(); if (tiled) ctx.rect(0, -40, W, H + 60); else ctx.rect(-2, -40, W + 4, H + 60); ctx.clip();
     this.drawPortals(ctx, world, t);
     ctx.drawImage(this.tileCache, 0, 0, W, H);
     this.drawDynamicTiles(ctx, world, t);
@@ -264,10 +329,6 @@ export class Renderer {
     world.fx.drawTexts(ctx);
     this.drawPlayerTags(ctx, world, t);
     ctx.restore();
-    ctx.restore();
-    this.drawFrame(ctx);
-    this.drawOffscreen(ctx, world);
-    this.drawHUD(ctx, world, dt, app);
   }
 
   // arrows at the screen edge pointing to enemies / teammates outside the camera view
@@ -277,6 +338,7 @@ export class Renderer {
     const { cw, ch, dpr } = this.view;
     const m = 22 * dpr;
     const arrow = (wx, wy, col, big) => {
+      if (cv.tiled) wx = cv.cx + wrapDx(cv.cx, wx);
       const sx = cv.ox + wx * cv.s, sy = cv.oy + wy * cv.s;
       if (sx > 0 && sx < cw && sy > 0 && sy < ch) return;
       const ax = clamp(sx, m, cw - m), ay = clamp(sy, m + 30 * dpr, ch - m);
@@ -299,7 +361,7 @@ export class Renderer {
     // darken whatever is outside the arena (letterbox) so the stage reads as framed
     const { cw, ch } = this.view;
     const cv = this.camView;
-    const ax0 = cv.ox, ax1 = cv.ox + W * cv.s, ay0 = cv.oy, ay1 = cv.oy + H * cv.s;
+    const ax0 = cv.tiled ? 0 : cv.ox, ax1 = cv.tiled ? cw : cv.ox + W * cv.s, ay0 = cv.oy, ay1 = cv.oy + H * cv.s;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = 'rgba(25,8,35,0.7)';
     if (ax0 > 2) ctx.fillRect(0, 0, ax0, ch);
@@ -770,7 +832,8 @@ export class Renderer {
   drawLighting(ctx, world, t) {
     const dark = world.theme.dark;
     const lc = this.lightCanvas;
-    const LW = 128, LH = 72;
+    const PAD = 16; // light map overhangs the arena so its soft edge never shows at the wrap seam
+    const LW = (W + PAD * 2) / 4, LH = H / 4;
     if (lc.width !== LW) { lc.width = LW; lc.height = LH; }
     const g = lc.getContext('2d');
     g.globalCompositeOperation = 'source-over';
@@ -778,8 +841,13 @@ export class Renderer {
     g.fillStyle = `rgba(20,5,25,${dark})`;
     g.fillRect(0, 0, LW, LH);
     g.globalCompositeOperation = 'destination-out';
-    const k = LW / W;
+    const k = 1 / 4;
     const hole = (x, y, r, a = 1) => {
+      if (x < r) hole1(x + W, y, r, a); else if (x > W - r) hole1(x - W, y, r, a); // light spills across the wrap seam
+      hole1(x, y, r, a);
+    };
+    const hole1 = (x, y, r, a) => {
+      x += PAD;
       const gr = g.createRadialGradient(x * k, y * k, 0, x * k, y * k, r * k);
       gr.addColorStop(0, `rgba(0,0,0,${a})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = gr; g.beginPath(); g.arc(x * k, y * k, r * k, 0, TAU); g.fill();
@@ -795,7 +863,7 @@ export class Renderer {
     for (const e of world.enemies) if (e.def.boss) hole(e.x + e.w / 2, e.y + e.h / 2, 70, 0.6);
     ctx.save();
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(lc, 0, -0.5, W, H + 1);
+    ctx.drawImage(lc, -PAD, -0.5, W + PAD * 2, H + 1);
     ctx.restore();
   }
 
