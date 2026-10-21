@@ -259,9 +259,10 @@ export class Player {
     const w = this.w_;
     this.hurt(1, this.cx, 'pit', true);
     const sp = w.respawnPoint();
-    this.x = sp.x - this.w / 2; this.y = -20; this.vy = 80; this.vx = 0;
+    const d = w.dropPoint(sp.x, this.w, this.h);
+    this.x = d.x - this.w / 2; this.y = d.y; this.vy = 80; this.vx = 0;
     if (!this.down) this.invuln = Math.max(this.invuln, 1.5);
-    else { this.x = sp.x - this.w / 2; this.y = H / 2; }
+    else this.y = Math.max(this.y, H / 2);
   }
 
   hurt(dmg, srcX, kind = 'hit', ignoreInvuln = false) {

@@ -158,6 +158,27 @@ export class World {
     }
     return this.spawns[0];
   }
+  // where to drop a respawning body of size w×h near center x: just above the screen when that column
+  // is open at the top, otherwise just below the ceiling (so heroes never land on top of the arena roof).
+  // Nudges sideways when x itself is inside a wall column. Returns { x, y } (x = center).
+  dropPoint(x, w, h) {
+    const rowsNeeded = Math.ceil(h / TILE);
+    for (let i = 0; i <= COLS; i++) {
+      const cx = x + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * TILE;
+      const c0 = Math.floor((cx - w / 2) / TILE), c1 = Math.floor((cx + w / 2 - 0.01) / TILE);
+      const free = (r) => {
+        for (let c = c0; c <= c1; c++) { const t = this.tileAt(c, r); if (isSolidT(t) || t === T_ONEWAY) return false; }
+        return true;
+      };
+      if (free(0)) return { x: cx, y: -20 };
+      for (let r = 1; r + rowsNeeded <= ROWS; r++) {
+        let ok = true;
+        for (let k = 0; k < rowsNeeded && ok; k++) ok = free(r + k);
+        if (ok) return { x: cx, y: r * TILE };
+      }
+    }
+    return { x, y: -20 };
+  }
 
   // ================================================================= PHYSICS
   moveEntity(e, dt, opts = {}) {
@@ -508,7 +529,7 @@ export class World {
       // pit / lava
       const inLava = !def.flying && this.hasLava && this.tilesUnder(e, T_LAVA);
       if (e.y > H + 10 || inLava) {
-        if (def.boss) { e.y = -40; e.vy = 0; e.x = W / 2 - e.w / 2; continue; }
+        if (def.boss) { const d = this.dropPoint(W / 2, e.w, e.h); e.y = d.y < 0 ? -40 : d.y; e.vy = 0; e.x = clamp(d.x - e.w / 2, 0, W - e.w); continue; }
         if (inLava) this.fxEvent('lava', e.x + e.w / 2, e.y + e.h, 0);
         // respawn enraged
         const pt = pick(this.portals);
