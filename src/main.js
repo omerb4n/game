@@ -289,7 +289,10 @@ class App {
     const el = document.createElement('div');
     el.className = 'toast';
     el.innerHTML = `${icon ? `<span class="ti">${icon}</span>` : ''}<span>${msg}</span>`;
-    $('#toasts').appendChild(el);
+    const box = $('#toasts');
+    // keep at most two on screen so they never bury the content underneath
+    while (box.children.length >= 2) box.firstElementChild.remove();
+    box.appendChild(el);
     setTimeout(() => el.classList.add('out'), 3200);
     setTimeout(() => el.remove(), 3800);
   }
@@ -570,7 +573,7 @@ class App {
           if (online) hint = '<div class="wait">Waiting for a friend…</div>';
           if (!touchDev || connectedPads().length) hint += '<div class="hint">🎮 Press <b>A</b> on a gamepad to join</div>';
           if (!touchDev && !this.localSlots.some((s) => s.ctl.kind === 'kbRight') && i === this.roster.length) hint += `<button class="btn sm" data-nav data-act="addKb">⌨ Add ${this.localSlots.some((s) => s.ctl.kind.startsWith('kb')) ? '2nd ' : ''}keyboard player</button>`;
-          if (touchDev && !online && i === this.roster.length) hint += '<div class="hint">Play with friends on their own phones with <b>Online Co-op</b>!</div>';
+          if (touchDev && !online && i === this.roster.length) hint += '<div class="hint">📱 Friends?<br><b>Go Online</b></div>';
         } else hint = '<div class="wait">Open slot</div>';
         cards.push(`<div class="pcard empty"><div class="plus">+</div>${hint}</div>`);
       }
@@ -613,7 +616,7 @@ class App {
     }
   }
   controlsHelp() {
-    if (isTouchDevice()) return '🕹 Left thumb: move · Right: <b>Jump</b>, <b>Attack</b> (hold to charge), <b>★ Special</b>';
+    if (isTouchDevice()) return '🕹 Left: move · Right: <b>Jump</b> · <b>Attack</b> (hold) · <b>★ Special</b>';
     const kinds = new Set(this.localSlots.map((s) => s.ctl.kind));
     const parts = [];
     if (kinds.has('kbFull')) parts.push('⌨ Move <b>WASD/Arrows</b> · Jump <b>Space/Z/K</b> · Attack <b>X/J</b> · Special <b>C/L/Shift</b>');
@@ -651,7 +654,7 @@ class App {
         <div class="panel">
           <div class="lbl">Your baker name</div>
           <input id="pname" maxlength="10" placeholder="Baker" value="${esc(S().name || '')}" autocomplete="off">
-          <p class="desc">Each friend plays on their own phone or computer. One person hosts, everyone else joins with the room code.</p>
+          <p class="desc">One baker hosts, friends join with the code — each on their own device.</p>
         </div>
         <div class="panel">
           <button class="btn big primary" data-nav data-act="host" data-autofocus>🏠 Host a Room</button>
@@ -886,7 +889,7 @@ class App {
         ${thumb}
         <div class="ld-info">
           <div class="ld-title">${esc(L.name)}</div>
-          <div class="ld-rec ${teamLv + 1 < recLevel(L) ? 'under' : ''}">Recommended hero level <b>${recLevel(L)}</b> · your team: Lv ${teamLv}</div>
+          <div class="ld-rec ${teamLv + 1 < recLevel(L) ? 'under' : ''}">Suggested <b>Lv ${recLevel(L)}</b> · team Lv ${teamLv}</div>
           <div class="ld-type">${L.type === 'boss' ? 'BOSS BATTLE' : L.type === 'survive' ? `SURVIVE ${L.time}s` : `COLLECT ${Math.round(L.goal * (1 + 0.2 * (Math.max(1, this.roster.length) - 1)))} MUFFINS`}</div>
           <ul class="goals">${goals.map((g, i) => `<li class="${rec?.stars[i] ? 'done' : ''}">★ ${esc(g)}</li>`).join('')}</ul>
           ${rec ? `<div class="best">Best: ${rec.score.toLocaleString()} pts · ${fmtTime(rec.time)}</div>` : ''}
@@ -970,7 +973,7 @@ class App {
     this.show('pause', `
       <div class="modal">
         <h2>Paused</h2>
-        <div class="muted">${esc(L.name)}${this.session.online ? ' · the game keeps running online!' : ''}</div>
+        <div class="muted">${esc(L.name)}${this.session.online ? ' · still running online' : ''}</div>
         <button class="btn big primary" data-nav data-act="resume" data-autofocus>▶ Resume</button>
         ${isClient ? '' : '<button class="btn" data-nav data-act="restart">↻ Restart Level</button>'}
         <button class="btn" data-nav data-act="settings">⚙ Settings</button>
@@ -1112,7 +1115,7 @@ class App {
     if (!a) return;
     S().achievements[id] = Date.now();
     save();
-    setTimeout(() => { sfx('achievement'); this.toast(`<b>Trophy unlocked:</b> ${esc(a.name)}`, a.icon); }, 1200);
+    setTimeout(() => { sfx('achievement'); this.toast(`<b>Trophy!</b> ${esc(a.name)}`, a.icon); }, 1200);
   }
   awards(res) {
     const st = res.stats || {};
@@ -1132,7 +1135,7 @@ class App {
   xpHtml(x, heroId) {
     if (!x) return `<div class="rp-xp">Lv ${heroLevel(heroId)}</div>`;
     const pct = x.need ? Math.round((x.into / x.need) * 100) : 100;
-    const note = x.catchUp ? ' <span class="xp-note">catch-up ×</span>' : x.over ? ' <span class="xp-note">overleveled</span>' : '';
+    const note = x.catchUp ? ' <span class="xp-note">⚡ catch-up</span>' : x.over ? ' <span class="xp-note">overleveled</span>' : '';
     return `<div class="rp-xp">${x.lv > x.lv0 ? '<span class="lvup">LEVEL UP!</span> ' : ''}Lv ${x.lv} · +${x.gain} XP${note}
       <span class="bar xpbar"><i style="width:${pct}%"></i></span></div>`;
   }
@@ -1312,7 +1315,7 @@ class App {
               ${unlocked ? this.levelLine(h.id) : ''}
             </div>
           </div>
-          <div class="hats-title">Hat Shop <span class="muted">— earn 💎 sprinkles by collecting gems and clearing levels</span></div>
+          <div class="hats-title">🎩 Hat Shop</div>
           <div class="hats">${hats}</div>
         </div>
       </div>`);
@@ -1346,7 +1349,7 @@ class App {
         <h2>${esc(h.name)} <span class="lv">Lv ${lv}</span></h2>
         <div class="sk-pts"><b>${pts}</b> point${pts === 1 ? '' : 's'} ${spent(sk) ? '<button class="btn sm" data-nav data-act="respec" title="Refund all points (free)">↺ Reset</button>' : ''}</div>
       </div>
-      <div class="sk-sub">${lv < MAX_LEVEL ? `<span class="bar xpbar"><i style="width:${Math.round((li.into / li.need) * 100)}%"></i></span> ${li.into}/${li.need} XP to level ${lv + 1}` : 'Max level!'} · Heroes earn a skill point every level. Tiers unlock top to bottom. Reset is free.</div>
+      <div class="sk-sub">${lv < MAX_LEVEL ? `<span class="sk-xp"><span class="bar xpbar"><i style="width:${Math.round((li.into / li.need) * 100)}%"></i></span>${li.into}/${li.need} XP</span>` : 'Max level!'}<span class="muted">+1 point per level · reset is free</span></div>
       <div class="sk-body">${cols}</div>`);
   }
   buySkill(nodeId) {
@@ -1431,15 +1434,15 @@ class App {
           ${slider('master', 'Master volume', 0, 1, 0.05)}${slider('music', 'Music', 0, 1, 0.05)}${slider('sfx', 'Sound effects', 0, 1, 0.05)}
           <h3>Gameplay</h3>
           ${choice('difficulty', 'Default difficulty', [['casual', 'Casual'], ['normal', 'Normal'], ['hard', 'Hard']])}
-          ${toggle('assistAim', 'Aim assist', 'Gently bends shots toward enemies')}
+          ${toggle('assistAim', 'Aim assist', 'Shots bend toward foes')}
           ${toggle('damageNumbers', 'Damage numbers')}
-          ${toggle('unlockAll', 'Party mode', 'Unlock all heroes, worlds & levels')}
+          ${toggle('unlockAll', 'Party mode', 'Unlock everything')}
         </div>
         <div class="scol">
           <h3>Controls</h3>
-          ${slider('touchSize', 'Touch button size', 0.7, 1.4, 0.05)}${slider('touchOpacity', 'Touch opacity', 0.2, 1, 0.05)}
-          ${toggle('leftHanded', 'Left-handed touch layout')}
-          ${toggle('upToJump', 'Up to jump', 'Push stick / W / ↑ up to jump')}
+          ${slider('touchSize', 'Button size', 0.7, 1.4, 0.05)}${slider('touchOpacity', 'Button opacity', 0.2, 1, 0.05)}
+          ${toggle('leftHanded', 'Left-handed layout')}
+          ${toggle('upToJump', 'Up to jump')}
           ${toggle('haptics', 'Vibration')}
           <h3>Display</h3>
           ${slider('camZoom', 'Camera zoom', 1, 1.7, 0.05)}
@@ -1447,7 +1450,7 @@ class App {
           ${choice('quality', 'Graphics', [['low', 'Battery saver'], ['auto', 'Auto'], ['high', 'Max']])}
           ${toggle('reduceFlashes', 'Reduce flashes')}
           ${toggle('showFps', 'Show FPS / ping')}
-          ${toggle('autoFullscreen', 'Auto fullscreen', 'Go fullscreen on phones when you tap or start a level')}
+          ${toggle('autoFullscreen', 'Auto fullscreen')}
           <div class="srow"><span>Fullscreen</span><button class="btn" data-nav data-act="fullscreen">⛶ Toggle</button></div>
           <div class="srow"><span>Progress</span><button class="btn danger" data-nav data-act="reset">Reset save…</button></div>
         </div>
@@ -1468,16 +1471,17 @@ class App {
     this.show('howto', `
       <div class="topbar"><button class="btn icon" data-nav data-act="back">◀</button><h2>How to Play</h2><span></span></div>
       <div class="howto-body">
-        ${sec('🧁', 'Bake the goal', 'Defeat enemies to make them drop muffins. Fill the muffin meter and a <b>Golden Muffin</b> appears — grab it to clear the level. Some levels ask you to <b>survive</b> the clock, others end in a <b>boss battle</b>.')}
-        ${sec('👟', 'Stomp!', 'Jump on enemies to stomp them and bounce higher — hold jump for an extra-high bounce. Spiky enemies hurt to stomp. Frozen enemies <b>shatter</b> when stomped.')}
-        ${sec('🌀', 'Enrage', 'Enemies that fall into a pit or lava return through a portal <b>ENRAGED</b>: red, faster and tougher — but worth more points and muffins.')}
-        ${sec('⚡', 'Combos', 'Keep defeating enemies to build a team combo. Every 5 combo raises the score multiplier. Getting hit halves the combo for everyone!')}
-        ${sec('💖', 'Revive your friends', 'When a hero runs out of hearts they float in a bubble. Stand next to them to revive them. If everyone is down, the level is lost. Downed players can steer their bubble toward friends.')}
-        ${sec('🧪', 'Teamwork', 'Heroes combo off each other: Mira <b>freezes</b> (frozen foes take +50%), Cinna <b>marks</b> (+25% damage from everyone), Dr. Fizz <b>heals</b> and speeds revives, Sir Brioche <b>blocks</b> shots for the team.')}
-        ${sec('🕹', 'Movement tech', 'Jump height depends on how long you hold. You can jump slightly after leaving a ledge and presses just before landing still count. Hold down + jump to drop through wafer platforms. Hold down in the air to fall faster. Run off the screen edge to wrap around!')}
-        ${sec('⭐', 'Stars & sprinkles', 'Each level has 3 stars: clear it, beat the par time, and take few hits. Collect 💎 sprinkles to buy hats. Pick a <b>Topping</b> perk between levels to power up your run.')}
-        ${sec('🌐', 'Online co-op', 'Tap <b>Online Co-op → Host</b> and share the link or QR code. Friends open it on their phones and join instantly — up to 4 players. Gamepads and a shared keyboard work for local co-op too.')}
-        <div class="howto-card about"><div class="hi">🧁</div><div><h4>About</h4><p>Pastry Paladins v1.0 — every sprite is drawn in code and every sound is synthesized live. Online play uses <b>PeerJS</b> (MIT) for WebRTC and <b>qrcode-generator</b> (MIT) for invite codes. Fonts: <b>Fredoka</b> and <b>Lilita One</b> (SIL OFL). Built with Claude Code. Thanks for playing!</p></div></div>
+        ${sec('🧁', 'Fill the meter', 'Beat enemies → they drop muffins → grab the <b>Golden Muffin</b>.')}
+        ${sec('👟', 'Stomp!', 'Land on heads. Hold jump to bounce higher. <b>Frozen</b> foes shatter.')}
+        ${sec('🔥', 'Enrage', 'Foes that fall in a pit come back <b>red</b>: tougher, but worth more.')}
+        ${sec('⚡', 'Combo', 'Chain kills for a bigger multiplier. Getting hit halves it.')}
+        ${sec('💖', 'Revive', 'Downed friends float in a bubble — stand next to them.')}
+        ${sec('🧪', 'Team up', 'Freeze, mark, heal and shield — heroes power each other up.')}
+        ${sec('🌳', 'Level up', 'Heroes earn XP and skill points. Spend them in the <b>Skill Tree</b>.')}
+        ${sec('⭐', 'Stars & hats', 'Clear fast with few hits for ⭐. Spend 💎 on hats.')}
+        ${sec('🕹', 'Pro moves', 'Down + jump drops through wafers. Run off the edge to wrap.')}
+        ${sec('🌐', 'Online', '<b>Host</b>, share the QR or link — up to 4 phones.')}
+        <div class="howto-card about"><div class="hi">🧁</div><div><h4>About</h4><p>Pastry Paladins v1.0 — all art drawn in code, all sound synthesized live. <b>PeerJS</b> &amp; <b>qrcode-generator</b> (MIT), <b>Fredoka</b> &amp; <b>Lilita One</b> (OFL). Built with Claude Code.</p></div></div>
       </div>`);
   }
 }
