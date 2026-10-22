@@ -1,5 +1,5 @@
 // Offline cache: network-first for app files, fall back to cache when offline.
-const CACHE = 'pastry-paladins-v12';
+const CACHE = 'pastry-paladins-v13';
 const CORE = ['./', './index.html', './css/style.css', './manifest.webmanifest', './assets/icon.svg',
   './src/main.js', './src/util.js', './src/config.js', './src/save.js', './src/audio.js', './src/input.js', './src/net.js', './src/menuscene.js', './src/perf.js',
   './src/data/heroes.js', './src/data/enemies.js', './src/data/levels.js', './src/data/perks.js', './src/data/skills.js',

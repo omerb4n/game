@@ -22,6 +22,7 @@ const defaults = () => ({
     unlockAll: false,
     reduceFlashes: false,
     autoFullscreen: true,
+    homeTipSeen: false,
     camZoom: 1.35,
   },
   levels: {}, // '1-1': {stars, score, time, stars bits}

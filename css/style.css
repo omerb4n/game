@@ -84,6 +84,11 @@ small { display: block; font-size: 0.8rem; opacity: 0.75; font-weight: 500; }
 .coinbar span { background: var(--panel); border: 2px solid rgba(255, 255, 255, 0.2); padding: 0.2em 0.7em; border-radius: 999px; }
 .title .coinbar { position: absolute; top: calc(0.7rem + var(--safe-t)); right: calc(1rem + var(--safe-r)); }
 .fsbtn { position: absolute; bottom: calc(0.8rem + var(--safe-b)); right: calc(1rem + var(--safe-r)); }
+.home-tip { position: fixed; inset: 0; z-index: 60; display: flex; }
+.home-tip .modal { max-width: min(26rem, 92vw); }
+.tip-steps { text-align: left; margin: 0.2rem 0; padding-left: 1.4rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.tip-steps small { display: block; opacity: 0.7; }
+.tip-steps .key { display: inline-block; border: 2px solid currentColor; border-radius: 0.35rem; padding: 0 0.3rem; line-height: 1.2; }
 .version { position: absolute; bottom: calc(0.6rem + var(--safe-b)); left: calc(1rem + var(--safe-l)); font-size: 0.8rem; opacity: 0.6; }
 
 /* ---------------------------------------------------------------- TOPBAR */

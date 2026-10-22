@@ -131,6 +131,10 @@ export function uid() {
 }
 
 export const isTouchDevice = () => 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+// iPhone browsers (Safari, Chrome, … all WebKit) only allow fullscreen for <video>; the home-screen app is the way there
+export const canFullscreen = () => !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+export const isIPhone = () => /iPhone|iPod/.test(navigator.userAgent);
+export const isStandalone = () => navigator.standalone === true || !!window.matchMedia?.('(display-mode: standalone), (display-mode: fullscreen)').matches;
 
 // Draw a rounded rect path
 export function rrect(ctx, x, y, w, h, r) {

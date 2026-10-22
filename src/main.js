@@ -1,5 +1,5 @@
 // Pastry Paladins — app shell: screens, run flow, lobby & online orchestration, main loop.
-import { DT, W, H, roomCode, isTouchDevice, clamp, fmtTime, rrect } from './util.js';
+import { DT, W, H, roomCode, isTouchDevice, canFullscreen, isIPhone, isStandalone, clamp, fmtTime, rrect } from './util.js';
 import { load, save, S, settings, recordLevel, totalStars, addCoins, levelRecord, resetSave, heroProg } from './save.js';
 import { initAudio, sfx, playMusic, stopMusic, applyVolumes, setDuck, resumePendingMusic } from './audio.js';
 import { Controller, initKeyboard, onNav, pollPadsForMenu, touch, endSample, clearLatches, emitNav, connectedPads } from './input.js';
@@ -110,7 +110,7 @@ class App {
     this.renderer.resize();
     const unlockAudio = () => { initAudio(); resumePendingMusic(); };
     // Fullscreen needs a user gesture: enter it on the first tap (touch devices), and again when a level starts.
-    const firstTap = () => { this.autoFullscreen(); document.removeEventListener('touchend', firstTap, true); document.removeEventListener('pointerup', firstTap, true); };
+    const firstTap = () => { this.autoFullscreen(); this.maybeHomeTip(); document.removeEventListener('touchend', firstTap, true); document.removeEventListener('pointerup', firstTap, true); };
     if (isTouchDevice()) {
       document.addEventListener('touchend', firstTap, true);
       document.addEventListener('pointerup', firstTap, true);
@@ -344,7 +344,7 @@ class App {
         </div>
       </div>
       ${this.coinBar()}
-      <button class="btn icon fsbtn" data-nav data-act="fullscreen" title="Fullscreen">⛶</button>
+      ${this.fsMode() === 'api' ? '<button class="btn icon fsbtn" data-nav data-act="fullscreen" title="Fullscreen">⛶</button>' : this.fsMode() === 'home' ? '<button class="btn icon fsbtn" data-nav data-act="homeTip" title="Play full screen">📲</button>' : ''}
       <div class="version">v1.0 · made with ♥ and butter</div>
     `);
   }
@@ -361,6 +361,7 @@ class App {
       case 'title': this.goTitle(); break;
       case 'back': this.back(); break;
       case 'fullscreen': this.toggleFullscreen(); break;
+      case 'homeTip': this.homeTip(); break;
       // lobby
       case 'hero': this.cycleHero(+d.slot, +d.dir); break;
       case 'hat': this.cycleHat(+d.slot, +d.dir); break;
@@ -413,8 +414,38 @@ class App {
       case 'reset': if (confirm('Reset ALL progress, coins, hats and trophies?')) { resetSave(); this.toast('Progress reset'); this.goSettings(); } break;
     }
   }
+  // 'api': the Fullscreen API works · 'home': iPhone in a browser, only Add to Home Screen gets rid of the bars ·
+  // '': already an installed app, or a browser with no way to go fullscreen
+  fsMode() {
+    if (isStandalone()) return '';
+    if (canFullscreen()) return 'api';
+    return isIPhone() ? 'home' : '';
+  }
+  maybeHomeTip() {
+    if (this.fsMode() !== 'home' || settings().homeTipSeen || this.screen !== 'title') return;
+    settings().homeTipSeen = true; save();
+    setTimeout(() => this.homeTip(), 400);
+  }
+  homeTip() {
+    if (document.querySelector('.home-tip')) return;
+    const el = document.createElement('div');
+    el.className = 'screen overlay home-tip';
+    el.innerHTML = `
+      <div class="modal">
+        <h2>📲 Play full screen</h2>
+        <div class="muted">iPhone browsers can't hide their bars — the home screen app can.</div>
+        <ol class="tip-steps">
+          <li>Tap <b>Share</b> <span class="key">⍐</span><small>In Chrome it's in the address bar</small></li>
+          <li>Tap <b>Add to Home Screen</b></li>
+          <li>Open <b>Pastry Paladins</b> from your home screen</li>
+        </ol>
+        <button class="btn primary" data-nav data-act="closeTip">Got it</button>
+      </div>`;
+    el.addEventListener('click', (e) => { if (e.target === el || e.target.closest('[data-act="closeTip"]')) el.remove(); });
+    document.body.appendChild(el);
+  }
   autoFullscreen() {
-    if (!settings().autoFullscreen || !isTouchDevice()) return;
+    if (!settings().autoFullscreen || !isTouchDevice() || this.fsMode() !== 'api') return;
     if (document.fullscreenElement || document.webkitFullscreenElement) return;
     if (window.matchMedia?.('(display-mode: fullscreen)').matches) return; // installed app is already fullscreen
     this.enterFullscreen();
@@ -430,6 +461,7 @@ class App {
     } catch (e) { /* not allowed right now */ }
   }
   toggleFullscreen() {
+    if (this.fsMode() === 'home') { this.homeTip(); return; }
     if (!document.fullscreenElement && !document.webkitFullscreenElement) this.enterFullscreen();
     else (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
   }
@@ -1465,8 +1497,9 @@ class App {
           ${choice('quality', 'Graphics', [['low', 'Battery saver'], ['auto', 'Auto'], ['high', 'Max']])}
           ${toggle('reduceFlashes', 'Reduce flashes')}
           ${toggle('showFps', 'Show FPS / ping')}
-          ${toggle('autoFullscreen', 'Auto fullscreen')}
-          <div class="srow"><span>Fullscreen</span><button class="btn" data-nav data-act="fullscreen">⛶ Toggle</button></div>
+          ${this.fsMode() === 'api' ? `${toggle('autoFullscreen', 'Auto fullscreen')}
+          <div class="srow"><span>Fullscreen</span><button class="btn" data-nav data-act="fullscreen">⛶ Toggle</button></div>` : ''}
+          ${this.fsMode() === 'home' ? '<div class="srow"><span>Full screen</span><button class="btn" data-nav data-act="homeTip">📲 Add to Home Screen</button></div>' : ''}
           <div class="srow"><span>Progress</span><button class="btn danger" data-nav data-act="reset">Reset save…</button></div>
         </div>
       </div>`);
