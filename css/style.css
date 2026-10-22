@@ -177,7 +177,7 @@ input:focus { outline: 0.22rem solid var(--gold); }
 .stars i.on { color: #ffb800; text-shadow: 0 1px 0 var(--ol); }
 .stars.sm { font-size: 0.8rem; }
 /* stars sit in the narrow bottom of the round node: keep them small and tight */
-.lnode .stars { font-size: 0.6rem; line-height: 1; letter-spacing: -0.08em; margin-top: 0.05rem; white-space: nowrap; }
+.lnode .stars { display: flex; justify-content: center; font-size: 0.6rem; line-height: 1; letter-spacing: -0.08em; margin-top: 0.05rem; white-space: nowrap; }
 .lnode .ln-i { font-size: 1.05rem; }
 .lnode .ln-n { font-size: 0.8rem; line-height: 1.05; }
 .lnode:has(.stars) { padding-bottom: 0.25rem; }
