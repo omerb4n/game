@@ -149,7 +149,8 @@ class App {
       return;
     }
     this.gov.tick(raw, now - this.last, playing);
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    // rAF timestamps can trail performance.now() (used when resetting this.last), so never step backwards
+    const dt = Math.max(0, Math.min(0.05, (now - this.last) / 1000));
     this.last = now;
     this.fpsT += dt; this.fpsN++;
     if (this.fpsT > 0.5) { this.fps = Math.round(this.fpsN / this.fpsT); this.fpsT = 0; this.fpsN = 0; }
@@ -549,7 +550,7 @@ class App {
         const mineIdx = r.peer === this.session.myId ? r.slot : -1;
         const mine = mineIdx >= 0;
         const slot = mine ? this.localSlots[mineIdx] : null;
-        const dev = slot ? slot.ctl.label : online ? '🌐 Online' : '';
+        const dev = slot ? slot.ctl.label : online ? '🌐' : '';
         const showPing = online && ((isClient && mine) || (!isClient && !mine));
         cards.push(`
           <div class="pcard" style="--pc:${PLAYER_COLORS[i]}">
@@ -558,7 +559,7 @@ class App {
               ${!mine && this.session.role === 'host' ? `<button class="x" data-nav data-act="kick" data-peer="${esc(r.peer)}" title="Remove from room">✕</button>` : ''}</div>
             <canvas width="120" height="120" data-hero="${h.id}" data-hat="${esc(r.hat || 'none')}"></canvas>
             <div class="pc-name">${esc(h.name)} <span class="lv">Lv ${r.lv || 1}</span></div>
-            <div class="pc-role">${esc(h.role)} · ${'❤'.repeat(h.hp)}</div>
+            <div class="pc-role">${esc(h.role)} · <span class="hp">❤ ${h.hp}</span></div>
             <div class="pc-special">★ ${esc(h.special)}</div>
             ${showPing ? `<div class="pc-ping" data-ping-peer="${esc(r.peer)}">📶 …</div>` : ''}
             ${mine ? `<div class="pc-arrows">
@@ -612,7 +613,8 @@ class App {
       else { const i = this.session.peerInfo(el.dataset.pingPeer); if (!i) continue; rtt = i.rtt; via = i.via; }
       const q = !rtt ? '' : rtt < 90 ? 'good' : rtt < 180 ? 'ok' : 'bad';
       el.className = `pc-ping ${q}`;
-      el.textContent = `📶 ${rtt ? Math.round(rtt) + ' ms' : '…'}${via ? ' · ' + (label[via] || via) : ''}`;
+      el.textContent = `📶 ${rtt ? Math.round(rtt) + ' ms' : '…'}`;
+      el.title = via ? label[via] || via : '';
     }
   }
   controlsHelp() {
