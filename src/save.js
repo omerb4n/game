@@ -29,6 +29,7 @@ const defaults = () => ({
   coins: 0,
   hats: ['none'],
   equipped: {}, // heroId -> hatId
+  heroes: {}, // heroId -> { xp, sk: { nodeId: rank } } (per-hero level & skill tree)
   achievements: {},
   stats: {
     kills: 0, muffins: 0, stomps: 0, revives: 0, levels: 0, deaths: 0, shatters: 0,
@@ -106,4 +107,10 @@ export function addCoins(n) {
   data.coins += n;
   data.stats.coinsEarned += Math.max(0, n);
   save();
+}
+
+export function heroProg(id) {
+  const h = data.heroes[id] || (data.heroes[id] = { xp: 0, sk: {} });
+  h.sk ||= {};
+  return h;
 }

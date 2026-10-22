@@ -1,11 +1,12 @@
 // Pastry Paladins — app shell: screens, run flow, lobby & online orchestration, main loop.
 import { DT, W, H, roomCode, isTouchDevice, clamp, fmtTime, rrect } from './util.js';
-import { load, save, S, settings, recordLevel, totalStars, addCoins, levelRecord, resetSave } from './save.js';
+import { load, save, S, settings, recordLevel, totalStars, addCoins, levelRecord, resetSave, heroProg } from './save.js';
 import { initAudio, sfx, playMusic, stopMusic, applyVolumes, setDuck, resumePendingMusic } from './audio.js';
 import { Controller, initKeyboard, onNav, pollPadsForMenu, touch, endSample, clearLatches, emitNav, connectedPads } from './input.js';
 import { HEROES, heroById, heroPortrait, HATS, drawHero, PLAYER_COLORS } from './data/heroes.js';
 import { WORLDS, LEVELS, levelById, worldLevels, expandMap, endlessStage, bossRushStage } from './data/levels.js';
 import { PERKS, perkById, rollPerks, ACHIEVEMENTS } from './data/perks.js';
+import { MAX_LEVEL, levelInfo, treeFor, pointsFor, spent, canBuy, sanitizeSkills, recLevel } from './data/skills.js';
 import { World } from './game/world.js';
 import { Renderer, levelThumb } from './game/render.js';
 import { MenuScene } from './menuscene.js';
@@ -43,6 +44,23 @@ function tilesForLevel(level) {
 function heroUnlocked(h) {
   if (!h.unlock || settings().unlockAll) return true;
   return S().worldsCleared.includes(h.unlock.world);
+}
+// ---- hero progression (per hero, stored on this device)
+function heroLevel(id) {
+  return settings().unlockAll ? MAX_LEVEL : levelInfo(heroProg(id).xp).lv; // party mode: everything maxed
+}
+function heroBuild(id) {
+  const lv = heroLevel(id);
+  return { lv, sk: sanitizeSkills(id, heroProg(id).sk, lv) };
+}
+function unspentPoints(id) {
+  const b = heroBuild(id);
+  return pointsFor(b.lv) - spent(b.sk);
+}
+// level & skills that arrive from another peer
+function netBuild(m) {
+  const lv = clamp(m.lv | 0, 1, MAX_LEVEL);
+  return { lv, sk: sanitizeSkills(m.hero, m.sk, lv) };
 }
 function worldUnlocked(id) {
   return id === 1 || settings().unlockAll || S().worldsCleared.includes(id - 1);
@@ -232,6 +250,7 @@ class App {
     sfx('back');
     const b = { online: 'title', heroes: 'title', achievements: 'title', settings: this.settingsReturn || 'title', howto: 'title', worldmap: 'lobby', lobby: 'title' }[this.screen];
     if (this.screen === 'pause') return this.resume();
+    if (this.screen === 'skills') return this.leaveSkills();
     if (this.screen === 'lobby') return this.leaveLobby();
     if (this.screen === 'worldmap' && this.session.role === 'client') return;
     if (b === 'title') this.goTitle();
@@ -366,6 +385,10 @@ class App {
       // heroes screen
       case 'viewHero': this.heroSel = d.hero; this.goHeroes(); break;
       case 'buyHat': this.buyHat(d.hat); break;
+      // skill tree
+      case 'skills': this.goSkills(d.hero, this.screen); break;
+      case 'buySkill': this.buySkill(d.node); break;
+      case 'respec': this.respec(); break;
       case 'equipHat': S().equipped[this.heroSel] = d.hat; save(); this.goHeroes(); break;
       // settings
       case 'toggle': settings()[d.key] = !settings()[d.key]; save(); this.applySettings(); this.goSettings(); break;
@@ -421,7 +444,7 @@ class App {
   }
   rebuildRoster() {
     if (this.session.role === 'client') return; // client receives roster from host
-    const mine = this.localSlots.map((s, i) => ({ peer: this.session.myId, slot: i, hero: s.hero, hat: s.hat || S().equipped[s.hero] || 'none', name: this.session.online ? (S().name || 'Host') : `P${i + 1}` }));
+    const mine = this.localSlots.map((s, i) => ({ peer: this.session.myId, slot: i, hero: s.hero, hat: s.hat || S().equipped[s.hero] || 'none', name: this.session.online ? (S().name || 'Host') : `P${i + 1}`, ...heroBuild(s.hero) }));
     const remote = this.roster.filter((r) => r.peer !== this.session.myId);
     const all = [...mine, ...remote].slice(0, 4);
     this.roster = all.map((r, i) => ({ ...r, id: i, name: this.session.online ? r.name : `P${i + 1}`, perks: r.perks || [] }));
@@ -486,7 +509,7 @@ class App {
     s.hat = null;
     sfx('select');
     this.rebuildRoster();
-    if (this.session.role === 'client') this.session.send({ type: 'setHero', hero: s.hero, hat: S().equipped[s.hero] || 'none' });
+    this.sendHero();
     this.syncLobby();
     this.renderLobby();
   }
@@ -501,9 +524,15 @@ class App {
     S().equipped[s.hero] = s.hat; save();
     sfx('select');
     this.rebuildRoster();
-    if (this.session.role === 'client') this.session.send({ type: 'setHero', hero: s.hero, hat: s.hat });
+    this.sendHero();
     this.syncLobby();
     this.renderLobby();
+  }
+  // client: tell the host about our hero, hat, level and skills
+  sendHero() {
+    if (this.session.role !== 'client') return;
+    const s = this.localSlots[0];
+    this.session.send({ type: 'setHero', hero: s.hero, hat: s.hat || S().equipped[s.hero] || 'none', ...heroBuild(s.hero) });
   }
   renderLobby() {
     const online = this.session.online;
@@ -525,13 +554,14 @@ class App {
               ${mine && mineIdx > 0 ? `<button class="x" data-nav data-act="removeSlot" data-slot="${mineIdx}" title="Remove">✕</button>` : ''}
               ${!mine && this.session.role === 'host' ? `<button class="x" data-nav data-act="kick" data-peer="${esc(r.peer)}" title="Remove from room">✕</button>` : ''}</div>
             <canvas width="120" height="120" data-hero="${h.id}" data-hat="${esc(r.hat || 'none')}"></canvas>
-            <div class="pc-name">${esc(h.name)}</div>
+            <div class="pc-name">${esc(h.name)} <span class="lv">Lv ${r.lv || 1}</span></div>
             <div class="pc-role">${esc(h.role)} · ${'❤'.repeat(h.hp)}</div>
             <div class="pc-special">★ ${esc(h.special)}</div>
             ${showPing ? `<div class="pc-ping" data-ping-peer="${esc(r.peer)}">📶 …</div>` : ''}
             ${mine ? `<div class="pc-arrows">
               <button class="btn sm" data-nav data-act="hero" data-slot="${mineIdx}" data-dir="-1">◀</button>
               <button class="btn sm hatbtn" data-nav data-act="hat" data-slot="${mineIdx}" data-dir="1" title="Change hat">🎩</button>
+              <button class="btn sm treebtn" data-nav data-act="skills" data-hero="${h.id}" title="Skill tree">🌳${unspentPoints(h.id) > 0 ? '<i class="dot"></i>' : ''}</button>
               <button class="btn sm" data-nav data-act="hero" data-slot="${mineIdx}" data-dir="1">▶</button></div>` : '<div class="pc-arrows muted">friend</div>'}
           </div>`);
       } else {
@@ -674,7 +704,7 @@ class App {
       this.roster = [];
       this.setupClientHandlers();
       const sl = this.localSlots[0];
-      s.send({ type: 'hello', name, hero: sl.hero, hat: S().equipped[sl.hero] || 'none' });
+      s.send({ type: 'hello', name, hero: sl.hero, hat: S().equipped[sl.hero] || 'none', ...heroBuild(sl.hero) });
       this.netMsg(`Connected${s.transport === 'relay' ? ' via relay' : ''}! Waiting for room info…`);
     } catch (e) {
       this.netMsg(e.message || String(e), true);
@@ -717,9 +747,9 @@ class App {
   setupHostHandlers() {
     const s = this.session;
     s.on('hello', (m, from) => {
-      if (this.screen !== 'lobby' && this.screen !== 'worldmap') { s.sendTo(from, { type: 'busy' }); return; }
+      if (this.screen !== 'lobby' && this.screen !== 'worldmap' && this.screen !== 'skills') { s.sendTo(from, { type: 'busy' }); return; }
       if (this.roster.length >= 4) { s.sendTo(from, { type: 'full' }); return; }
-      this.roster.push({ peer: from, slot: 0, hero: m.hero, hat: m.hat, name: (m.name || 'Baker').slice(0, 10), perks: [] });
+      this.roster.push({ peer: from, slot: 0, hero: m.hero, hat: m.hat, name: (m.name || 'Baker').slice(0, 10), perks: [], ...netBuild(m) });
       this.rebuildRoster();
       sfx('join');
       this.toast(`${esc(m.name || 'A baker')} joined!`, '👋');
@@ -729,7 +759,7 @@ class App {
     });
     s.on('setHero', (m, from) => {
       const r = this.roster.find((x) => x.peer === from);
-      if (r) { r.hero = m.hero; r.hat = m.hat; this.syncLobby(); if (this.screen === 'lobby') this.renderLobby(); }
+      if (r) { r.hero = m.hero; r.hat = m.hat; Object.assign(r, netBuild(m)); this.syncLobby(); if (this.screen === 'lobby') this.renderLobby(); }
     });
     s.on('perkPick', (m, from) => {
       const r = this.roster.find((x) => x.id === m.id && x.peer === from);
@@ -849,12 +879,14 @@ class App {
     if (L) {
       const rec = levelRecord(L.id);
       const fake = { level: L, nPlayers: Math.max(1, this.roster.length) };
+      const teamLv = Math.round(this.roster.reduce((a, r) => a + (r.lv || 1), 0) / Math.max(1, this.roster.length));
       const goals = World.prototype.starGoals.call(fake);
       const thumb = `<div class="thumb" data-thumb="${L.id}"></div>`;
       detail = `<div class="ldetail">
         ${thumb}
         <div class="ld-info">
           <div class="ld-title">${esc(L.name)}</div>
+          <div class="ld-rec ${teamLv + 1 < recLevel(L) ? 'under' : ''}">Recommended hero level <b>${recLevel(L)}</b> · your team: Lv ${teamLv}</div>
           <div class="ld-type">${L.type === 'boss' ? 'BOSS BATTLE' : L.type === 'survive' ? `SURVIVE ${L.time}s` : `COLLECT ${Math.round(L.goal * (1 + 0.2 * (Math.max(1, this.roster.length) - 1)))} MUFFINS`}</div>
           <ul class="goals">${goals.map((g, i) => `<li class="${rec?.stars[i] ? 'done' : ''}">★ ${esc(g)}</li>`).join('')}</ul>
           ${rec ? `<div class="best">Best: ${rec.score.toLocaleString()} pts · ${fmtTime(rec.time)}</div>` : ''}
@@ -1018,10 +1050,45 @@ class App {
       if (reached > S().endlessBest) { S().endlessBest = reached; res.newBest = true; }
       if (reached >= 10) this.unlock('endless10');
     }
+    this.awardXp(res);
     save();
     this.checkAchievements();
     if (this.session.role !== 'client') this.hostBroadcastGoto({ screen: 'results', result: res });
     setTimeout(() => this.showResults(res, false), res.kind === 'clear' ? 900 : 300);
+  }
+  // XP for this device's heroes. Overleveled heroes earn much less on easy stages; a hero well below
+  // your best hero (or below a friend in the room) earns bonus catch-up XP.
+  awardXp(res) {
+    res.xp = {};
+    if (settings().unlockAll) return;
+    const L = this.world?.level || levelById(res.levelId);
+    if (!L) return;
+    const rec = recLevel(L), clear = res.kind === 'clear';
+    const nStars = res.stars.filter(Boolean).length;
+    const teamMax = Math.max(1, ...this.roster.map((r) => r.lv || 1));
+    let changed = false;
+    for (const r of this.roster) {
+      if (r.peer !== this.session.myId) continue;
+      const s = res.stats?.[r.id];
+      if (!s) continue;
+      const prog = heroProg(r.hero);
+      const before = levelInfo(prog.xp);
+      const myBest = Math.max(...HEROES.map((h) => levelInfo(heroProg(h.id).xp).lv));
+      let xp = clear ? (L.endless ? 30 + 4 * L.tier : 30 + 6 * rec) : 8 + 2 * rec;
+      if (clear && !L.endless && !L.bossRush) xp += nStars * 10;
+      if (clear && L.type === 'boss') xp += 40;
+      xp += (s.kills || 0) + 4 * (s.revives || 0);
+      const over = before.lv - rec;
+      let mult = over > 2 ? Math.max(0.15, 1 - 0.25 * (over - 2)) : 1;
+      const catchUp = Math.max(myBest - before.lv >= 3 ? 1.5 : 1, teamMax - before.lv >= 3 ? 2 : 1);
+      mult *= catchUp;
+      const gain = before.lv >= MAX_LEVEL ? 0 : Math.max(1, Math.round(xp * mult));
+      prog.xp += gain;
+      const after = levelInfo(prog.xp);
+      res.xp[r.id] = { gain, lv0: before.lv, lv: after.lv, into: after.into, need: after.need, catchUp: catchUp > 1, over: over > 2 };
+      if (after.lv !== r.lv) { r.lv = after.lv; changed = true; }
+    }
+    if (changed) this.sendHero();
   }
   checkAchievements() {
     const st = S().stats;
@@ -1062,13 +1129,22 @@ class App {
     add(best((s) => -s.hits + 100, 100), { i: '🛡', n: 'Untouchable' });
     return out;
   }
-  showResults(res, fromNet) {
+  xpHtml(x, heroId) {
+    if (!x) return `<div class="rp-xp">Lv ${heroLevel(heroId)}</div>`;
+    const pct = x.need ? Math.round((x.into / x.need) * 100) : 100;
+    const note = x.catchUp ? ' <span class="xp-note">catch-up ×</span>' : x.over ? ' <span class="xp-note">overleveled</span>' : '';
+    return `<div class="rp-xp">${x.lv > x.lv0 ? '<span class="lvup">LEVEL UP!</span> ' : ''}Lv ${x.lv} · +${x.gain} XP${note}
+      <span class="bar xpbar"><i style="width:${pct}%"></i></span></div>`;
+  }
+  showResults(res, fromNet, again) {
     this.lastResult = res;
     const clear = res.kind === 'clear';
     const isClient = this.session.role === 'client';
     const L = this.world?.level || levelById(res.levelId);
-    playMusic('results');
-    if (clear) { sfx('victory'); this.menu.celebrate(L?.type === 'boss' ? 260 : 140); } else sfx('defeat');
+    if (!again) {
+      playMusic('results');
+      if (clear) { sfx('victory'); this.menu.celebrate(L?.type === 'boss' ? 260 : 140); } else sfx('defeat');
+    }
     const goals = this.world ? this.world.starGoals() : ['', '', ''];
     const aw = this.awards(res);
     const players = this.roster.map((r) => {
@@ -1080,6 +1156,7 @@ class App {
         <div class="rp-name">${esc(r.name)}</div>
         <div class="rp-stats">⚔ ${s.kills} · 🧁 ${s.muffins} · 💖 ${s.revives}</div>
         <div class="rp-awards">${(aw[r.id] || []).map((a) => `<span class="award">${a.i} ${a.n}</span>`).join('')}</div>
+        ${r.peer === this.session.myId ? this.xpHtml(res.xp?.[r.id], r.hero) : `<div class="rp-xp muted">Lv ${r.lv || 1}</div>`}
       </div>`;
     }).join('');
     const mode = this.run?.mode || 'campaign';
@@ -1097,6 +1174,9 @@ class App {
       secondary = `<button class="btn" data-nav data-act="toMap">${mode === 'campaign' ? '🗺 Map' : '⌂ Lobby'}</button>`;
     }
     const title = clear ? (L?.type === 'boss' ? 'BOSS DEFEATED!' : 'LEVEL CLEAR!') : mode === 'endless' ? 'RUN OVER' : 'CRUMBLED!';
+    // spend new skill points right from the results screen
+    const treeHero = this.roster.find((r) => r.peer === this.session.myId && unspentPoints(r.hero) > 0)?.hero;
+    if (treeHero) secondary += `<button class="btn treebtn" data-nav data-act="skills" data-hero="${treeHero}">🌳 Skills<i class="dot"></i></button>`;
     this.show('results', `
       <div class="res-wrap ${clear ? 'win' : 'lose'}">
         <div class="res-title">${title}</div>
@@ -1229,12 +1309,82 @@ class App {
                 <div>Health ${bar(h.hp, 5)}</div><div>Speed ${bar(h.speed - 80, 60)}</div><div>Skill ${bar(h.difficulty, 3)}</div>
               </div>
               <div class="hd-moves"><div><b>Attack:</b> ${esc(h.attackDesc)}</div><div><b>★ ${esc(h.special)}:</b> ${esc(h.specialDesc)}</div></div>
+              ${unlocked ? this.levelLine(h.id) : ''}
             </div>
           </div>
           <div class="hats-title">Hat Shop <span class="muted">— earn 💎 sprinkles by collecting gems and clearing levels</span></div>
           <div class="hats">${hats}</div>
         </div>
       </div>`);
+  }
+  levelLine(id) {
+    const lv = heroLevel(id), li = levelInfo(heroProg(id).xp), pts = unspentPoints(id);
+    return `<div class="hd-level"><span class="lv">Lv ${lv}</span>
+      ${lv < MAX_LEVEL ? `<span class="bar xpbar"><i style="width:${Math.round((li.into / li.need) * 100)}%"></i></span><small>${li.into}/${li.need} XP</small>` : '<small>MAX</small>'}
+      <button class="btn sm treebtn" data-nav data-act="skills" data-hero="${id}">🌳 Skill Tree${pts > 0 ? ` · ${pts} pt${pts > 1 ? 's' : ''}<i class="dot"></i>` : ''}</button></div>`;
+  }
+
+  // =============================================================== SKILL TREE
+  goSkills(heroId, from) {
+    if (from && from !== 'skills') this.skillsReturn = from;
+    this.skillHero = heroId || this.skillHero;
+    const id = this.skillHero, h = heroById(id), t = treeFor(id);
+    const { lv, sk } = heroBuild(id);
+    const pts = pointsFor(lv) - spent(sk);
+    const li = levelInfo(heroProg(id).xp);
+    const cols = t.branches.map((b) => `<div class="sk-branch" style="--bc:${b.color}">
+      <div class="sk-bname">${esc(b.name)}</div>
+      ${b.nodes.map((n) => {
+        const r = sk[n.id] || 0, can = canBuy(id, sk, n.id, lv);
+        const st = r >= n.ranks ? 'full' : r > 0 ? 'some' : can ? 'avail' : 'locked';
+        return `<button class="sk-node ${st} ${n.key ? 'key' : ''}" data-nav data-act="buySkill" data-node="${n.id}" ${can ? '' : 'aria-disabled="true"'}>
+          <span class="sk-i">${n.icon}</span><span class="sk-t"><span class="sk-n">${esc(n.name)} <span class="pips">${'●'.repeat(r)}${'○'.repeat(n.ranks - r)}</span></span><span class="sk-d">${esc(n.desc)}</span></span></button>`;
+      }).join('<span class="sk-link"></span>')}
+    </div>`).join('');
+    this.show('skills', `
+      <div class="topbar"><button class="btn icon" data-nav data-act="back">◀</button>
+        <h2>${esc(h.name)} <span class="lv">Lv ${lv}</span></h2>
+        <div class="sk-pts"><b>${pts}</b> point${pts === 1 ? '' : 's'} ${spent(sk) ? '<button class="btn sm" data-nav data-act="respec" title="Refund all points (free)">↺ Reset</button>' : ''}</div>
+      </div>
+      <div class="sk-sub">${lv < MAX_LEVEL ? `<span class="bar xpbar"><i style="width:${Math.round((li.into / li.need) * 100)}%"></i></span> ${li.into}/${li.need} XP to level ${lv + 1}` : 'Max level!'} · Heroes earn a skill point every level. Tiers unlock top to bottom. Reset is free.</div>
+      <div class="sk-body">${cols}</div>`);
+  }
+  buySkill(nodeId) {
+    const id = this.skillHero;
+    const { lv, sk } = heroBuild(id);
+    if (!canBuy(id, sk, nodeId, lv)) {
+      sfx('back');
+      const n = treeFor(id).byId[nodeId];
+      if (n && (sk[nodeId] || 0) >= n.ranks) this.toast('Already maxed');
+      else if (pointsFor(lv) - spent(sk) <= 0) this.toast('No skill points — level up to earn more!', '🌳');
+      else this.toast('Unlock the skill above it first', '🔒');
+      return;
+    }
+    sk[nodeId] = (sk[nodeId] || 0) + 1;
+    heroProg(id).sk = sk;
+    save();
+    sfx('select');
+    this.afterBuildChange();
+    this.goSkills();
+    $(`[data-node="${nodeId}"]`, this.ui)?.focus({ preventScroll: true });
+  }
+  respec() {
+    heroProg(this.skillHero).sk = {};
+    save();
+    sfx('back');
+    this.afterBuildChange();
+    this.goSkills();
+  }
+  afterBuildChange() {
+    if (this.session.role === 'client') return this.sendHero();
+    for (const r of this.roster) if (r.peer === this.session.myId && r.hero === this.skillHero) Object.assign(r, heroBuild(r.hero));
+    this.syncLobby();
+  }
+  leaveSkills() {
+    const to = this.skillsReturn;
+    if (to === 'lobby') this.goLobby();
+    else if (to === 'results' && this.lastResult) this.showResults(this.lastResult, false, true);
+    else this.goHeroes();
   }
   buyHat(id) {
     const hat = HATS.find((h) => h.id === id);

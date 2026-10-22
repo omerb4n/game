@@ -26,7 +26,8 @@ export class Player {
     this.ctl = info.ctl || null;
     this.color = PLAYER_COLORS[info.id % 4];
     this.perks = info.perks || [];
-    this.mods = computeMods(this.perks);
+    this.lv = info.lv || 1;
+    this.mods = computeMods(this.perks, { hero: this.hero.id, lv: this.lv, sk: info.sk || {} });
     this.x = 0; this.y = 0; this.w = 12; this.h = 14;
     this.vx = 0; this.vy = 0;
     this.facing = 1;
@@ -58,6 +59,7 @@ export class Player {
     this.healTick = 0;
     this.shield = 0;
     this.rushT = 0;
+    this.tonicT = 0;
     // anim
     this.sq = 0; this.runT = 0; this.blinkT = rand(2, 4); this.blink = false; this.hurtT = 0; this.t = rand(10);
     this.flash = 0;
@@ -125,6 +127,7 @@ export class Player {
     this.comboT -= dt;
     this.dropT -= dt;
     this.shield = Math.max(0, this.shield - dt);
+    this.tonicT = Math.max(0, this.tonicT - dt);
     if (this.rushT > 0) {
       this.rushT -= dt;
       if (Math.random() < 0.7) w.fx.add({ x: this.cx + rand(-5, 5), y: this.cy + rand(-6, 6), life: 0.35, size: 2.2, color: `hsl(${(this.t * 600) % 360},100%,70%)`, add: true, shape: 'star' });
@@ -137,7 +140,7 @@ export class Player {
 
     // horizontal movement
     const ice = this.onGround && this.groundTile === 6;
-    let maxSpd = this.hero.speed * this.mods.speed * (this.rushT > 0 ? 1.3 : 1) * (this.slowT > 0 ? 0.55 : 1) * (this.charging && this.hero.id === 'ranger' ? 0.6 : 1);
+    let maxSpd = this.hero.speed * this.mods.speed * (this.rushT > 0 ? 1.3 : this.tonicT > 0 ? 1.2 : 1) * (this.slowT > 0 ? 0.55 : 1) * (this.charging && this.hero.id === 'ranger' ? 0.6 : 1);
     if (this.dashT <= 0) {
       const target = c.x * maxSpd;
       let accel;

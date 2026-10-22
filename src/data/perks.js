@@ -1,4 +1,5 @@
 // Roguelite "Toppings" (perks) chosen between stages, and achievements.
+import { applyProgress } from './skills.js';
 
 export const PERKS = [
   { id: 'heart', name: 'Extra Layer', icon: '❤', desc: '+1 max heart and heal fully.', rarity: 1, apply: (m) => { m.maxHp += 1; } },
@@ -28,11 +29,14 @@ export function baseMods() {
   return {
     dmg: 1, speed: 1, atkSpeed: 1, cdMul: 1, size: 1, crit: 0, freezeChance: 0, burnChance: 0, airJumps: 0, magnet: 0,
     stompMul: 1, invulnBonus: 0, reviveMul: 1, lifesteal: 0, secondBake: 0, revenge: 0, coinMul: 1, maxHp: 0,
+    k: {}, // skill-tree keystones (flags read by hero kits)
   };
 }
 
-export function computeMods(perkIds) {
+// prog: { hero, lv, sk } from the hero's progression (level + skill tree); perks stack on top
+export function computeMods(perkIds, prog) {
   const m = baseMods();
+  if (prog) applyProgress(m, prog);
   for (const id of perkIds || []) perkById(id)?.apply(m);
   return m;
 }
