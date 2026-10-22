@@ -1,8 +1,8 @@
 // Offline cache: network-first for app files, fall back to cache when offline.
-const CACHE = 'pastry-paladins-v8';
+const CACHE = 'pastry-paladins-v9';
 const CORE = ['./', './index.html', './css/style.css', './manifest.webmanifest', './assets/icon.svg',
   './src/main.js', './src/util.js', './src/config.js', './src/save.js', './src/audio.js', './src/input.js', './src/net.js', './src/menuscene.js', './src/perf.js',
-  './src/data/heroes.js', './src/data/enemies.js', './src/data/levels.js', './src/data/perks.js',
+  './src/data/heroes.js', './src/data/enemies.js', './src/data/levels.js', './src/data/perks.js', './src/data/skills.js',
   './src/game/world.js', './src/game/player.js', './src/game/render.js', './src/game/fx.js', './vendor/peerjs.min.js', './vendor/qrcode.js', './vendor/mqtt.min.js'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).then(() => self.skipWaiting()));

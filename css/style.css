@@ -379,3 +379,48 @@ input[type=range]::-moz-range-thumb { width: 1.1rem; height: 1.1rem; border-radi
   .res-btns .btn.big { font-size: 1.15rem; }
   .perk { min-height: 6rem; width: 9.5rem; }
 }
+
+/* ---------------------------------------------------------------- PROGRESSION / SKILL TREE */
+.lv { display: inline-block; background: var(--gold); color: var(--ol); border-radius: 0.5em; padding: 0 0.4em; font-size: 0.72em; font-weight: 800; vertical-align: middle; text-shadow: none; }
+.treebtn { position: relative; }
+.dot { position: absolute; top: -0.25rem; right: -0.25rem; width: 0.6rem; height: 0.6rem; border-radius: 50%; background: #4fd67a; border: 2px solid var(--ol); animation: pulse 1.2s ease-in-out infinite; }
+.xpbar { width: 5.5rem; }
+.xpbar i { background: linear-gradient(90deg, #7ad9ff, #9dffb0); }
+.rp-xp { font-size: 0.7rem; margin-top: 0.2rem; text-align: center; }
+.rp-xp .xpbar { display: block; margin: 0.15rem auto 0; width: 6.5rem; }
+.lvup { color: var(--gold); font-weight: 800; animation: pulse 0.8s ease-in-out infinite; }
+.xp-note { font-size: 0.6rem; opacity: 0.75; }
+.hd-level { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap; }
+.hd-level small { display: inline; }
+.ld-rec { font-size: 0.75rem; opacity: 0.85; margin: 0.15rem 0; }
+.ld-rec b { color: var(--gold); }
+.ld-rec.under b { color: #ff7a7a; }
+.skills .topbar h2 { flex: 1; }
+.sk-pts { font-size: 0.9rem; display: flex; gap: 0.5rem; align-items: center; }
+.sk-pts b { font-size: 1.3rem; color: #9dffb0; }
+.sk-sub { font-size: 0.72rem; opacity: 0.8; font-weight: 500; margin-bottom: 0.4rem; }
+.sk-body { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; align-items: start; padding: 0.2rem; }
+.sk-branch { background: var(--panel); border: 2px solid var(--bc); border-radius: 1rem; padding: 0.4rem; display: flex; flex-direction: column; align-items: stretch; }
+.sk-bname { text-align: center; font-weight: 800; color: var(--bc); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem; margin-bottom: 0.25rem; }
+.sk-link { display: block; width: 3px; height: 0.35rem; margin: 0 auto; background: rgba(255, 255, 255, 0.25); }
+.sk-node { font: inherit; text-align: left; cursor: pointer; display: flex; gap: 0.45rem; align-items: center; border-radius: 0.75rem; padding: 0.3rem 0.45rem; border: 2px solid rgba(255, 255, 255, 0.2); background: rgba(0, 0, 0, 0.3); color: #fff; outline: none; transition: transform 0.1s; }
+.sk-node:focus, .sk-node:hover { outline: 0.2rem solid var(--gold); }
+.sk-node.avail { border-color: var(--bc); background: rgba(255, 255, 255, 0.1); animation: pulseBorder 1.4s ease-in-out infinite; }
+.sk-node.some, .sk-node.full { border-color: var(--bc); background: color-mix(in srgb, var(--bc) 30%, rgba(0, 0, 0, 0.4)); }
+.sk-node.locked { opacity: 0.45; }
+.sk-node.key { border-width: 3px; }
+.sk-node.key .sk-i { border-radius: 0.35rem; box-shadow: inset 0 0 0 2px var(--gold); }
+.sk-i { flex-shrink: 0; width: 1.7rem; height: 1.7rem; display: grid; place-items: center; border-radius: 50%; background: rgba(255, 255, 255, 0.12); font-size: 0.95rem; }
+.sk-t { display: flex; flex-direction: column; min-width: 0; }
+.sk-n { font-weight: 800; font-size: 0.8rem; }
+.pips { color: var(--bc); font-size: 0.65rem; letter-spacing: 0.05em; }
+.sk-d { font-size: 0.66rem; font-weight: 500; opacity: 0.85; line-height: 1.2; }
+@keyframes pulseBorder { 50% { box-shadow: 0 0 0.6rem var(--bc); } }
+@media (max-height: 460px) {
+  .sk-node { padding: 0.2rem 0.35rem; }
+  .sk-d { font-size: 0.6rem; }
+  .sk-sub { margin-bottom: 0.2rem; }
+}
+@media (max-aspect-ratio: 4/3) {
+  .sk-body { grid-template-columns: 1fr; }
+}

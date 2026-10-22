@@ -51,6 +51,7 @@ Invite links carry these parameters along automatically.
 - **4 worlds × 5 hand-built arenas**: Candy Meadows, Choco Caverns (dynamic lighting), Frosting Peaks (slippery ice), and Oven Citadel (caramel lava).
 - **11 enemy types**, plus **4 multi-phase bosses** with telegraphed attack patterns: King Gelatino, Cocoa Colossus, Sorbet Wyrm, and The Burnt Baron.
 - **3 game modes**: Campaign (60 stars to earn), Endless (waves, with a boss every 4th stage), and Boss Rush.
+- **Hero levels & skill trees**: each hero levels up (to 15) separately and earns a skill point per level. Each tree has a shared *Hearty* branch plus two hero branches with build-defining keystones (e.g. Whirlwind, Twin Bolt, Cluster Chili). Heroes start weak and end strong. Respec is free.
 - **19 "Topping" perks**: a roguelite pick-1-of-3 between levels.
 - **Co-op systems**:
   - Revive bubbles.
@@ -112,7 +113,7 @@ src/game/world.js    simulation: physics, director, combat, objectives, net sync
 src/game/player.js   hero movement feel, damage, revive, net state
 src/game/render.js   backgrounds, tile art, entities, lighting, HUD
 src/game/fx.js       particles, rings, flashes, floating text, screen shake
-src/data/*.js        heroes (+kits & drawing), enemies & bosses, levels, perks & trophies
+src/data/*.js        heroes (+kits & drawing), enemies & bosses, levels, perks & trophies, skill trees & XP
 src/audio.js         synthesized SFX + generative music
 src/input.js         keyboard schemes, gamepads, multi-touch controls
 src/net.js           PeerJS / BroadcastChannel sessions

@@ -14,6 +14,13 @@ function wrapRows(tiles) {
   return rows;
 }
 
+const ZONE_STYLE = {
+  heal: { rgb: '157,255,176', line: '#9dffb0', icon: '✚' },
+  tonic: { rgb: '255,122,217', line: '#ff7ad9', icon: '⚡' },
+  armor: { rgb: '191,239,255', line: '#bfefff', icon: '' },
+  fire: { rgb: '255,120,40', line: '#ff8a3d', icon: '' },
+};
+
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -456,17 +463,18 @@ export class Renderer {
       const a = Math.min(1, z.life / 0.5) * Math.min(1, (z.max - z.life) / 0.2 + 0.2);
       ctx.save();
       ctx.globalAlpha = a * 0.55;
+      const st = ZONE_STYLE[z.tonic ? 'tonic' : z.kind] || ZONE_STYLE.heal;
       const g = ctx.createRadialGradient(z.x, z.y, 0, z.x, z.y, z.r);
-      g.addColorStop(0, 'rgba(157,255,176,0.6)'); g.addColorStop(0.7, 'rgba(157,255,176,0.25)'); g.addColorStop(1, 'rgba(157,255,176,0)');
+      g.addColorStop(0, `rgba(${st.rgb},0.6)`); g.addColorStop(0.7, `rgba(${st.rgb},0.25)`); g.addColorStop(1, `rgba(${st.rgb},0)`);
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, TAU); ctx.fill();
       ctx.globalAlpha = a * 0.8;
-      ctx.strokeStyle = '#9dffb0'; ctx.setLineDash([4, 4]); ctx.lineDashOffset = -t * 20; ctx.lineWidth = 1.5;
+      ctx.strokeStyle = st.line; ctx.setLineDash([4, 4]); ctx.lineDashOffset = -t * 20; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, TAU); ctx.stroke();
       ctx.setLineDash([]);
       ctx.fillStyle = '#ffffff';
       ctx.font = `bold 10px ${FONT}`; ctx.textAlign = 'center';
-      ctx.fillText('✚', z.x, z.y + 4 + Math.sin(t * 4) * 2);
+      if (st.icon) ctx.fillText(st.icon, z.x, z.y + 4 + Math.sin(t * 4) * 2);
       ctx.restore();
     }
   }
@@ -747,6 +755,13 @@ export class Renderer {
           ctx.fillStyle = '#ff5a5a'; ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(-11, -2); ctx.lineTo(-7, 0); ctx.lineTo(-11, 2); ctx.closePath(); ctx.fill();
           break;
         }
+        case 'wave':
+          // Crumb Wave: a glowing crescent
+          ctx.rotate(ang);
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.fillStyle = 'rgba(255,209,102,0.35)'; ctx.beginPath(); ctx.arc(0, 0, b.r * 1.9, -1.2, 1.2); ctx.arc(-b.r * 0.9, 0, b.r * 1.5, 1.2, -1.2, true); ctx.fill();
+          ctx.fillStyle = '#fff3c4'; ctx.beginPath(); ctx.arc(0, 0, b.r * 1.4, -1.1, 1.1); ctx.arc(-b.r * 0.6, 0, b.r * 1.1, 1.1, -1.1, true); ctx.fill();
+          break;
         case 'shuriken':
           ctx.rotate(t * 25);
           ctx.fillStyle = '#d9dee8'; ctx.strokeStyle = OL; ctx.lineWidth = 0.8;

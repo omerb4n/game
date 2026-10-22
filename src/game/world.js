@@ -6,6 +6,7 @@ import { FX } from './fx.js';
 import { Player } from './player.js';
 import { sfx } from '../audio.js';
 import { settings } from '../save.js';
+import { worldToughness } from '../data/skills.js';
 
 export const T_EMPTY = 0, T_GROUND = 1, T_ALT = 2, T_ONEWAY = 3, T_SPIKE = 4, T_SPRING = 5, T_ICE = 6, T_LAVA = 7;
 const CHARMAP = { '#': T_GROUND, '=': T_ALT, '-': T_ONEWAY, '^': T_SPIKE, o: T_SPRING, i: T_ICE, L: T_LAVA };
@@ -87,8 +88,12 @@ export class World {
     if (L.type === 'collect') this.obj.goal = Math.round(L.goal * (1 + 0.12 * (n - 1)));
     if (L.type === 'survive') this.obj.timeLeft = L.time;
     if (L.type === 'waves') this.startWave(1);
-    this.hpScale = (1 + 0.15 * (n - 1)) * this.diff.hp * (L.hpScale || 1);
-    this.bossHpScale = (1 + 0.35 * (n - 1)) * this.diff.hp * (L.hpScale || 1);
+    // Hero-level scaling: enemies get tougher with the team's average level (so a lower-level friend still
+    // contributes), and later worlds are tuned for heroes that have grown into their skill trees.
+    const avgLv = this.players.reduce((a, p) => a + (p.lv || 1), 0) / Math.max(1, this.players.length);
+    const lvScale = worldToughness(L) * (1 + 0.012 * (avgLv - 1));
+    this.hpScale = (1 + 0.15 * (n - 1)) * this.diff.hp * (L.hpScale || 1) * lvScale;
+    this.bossHpScale = (1 + 0.35 * (n - 1)) * this.diff.hp * (L.hpScale || 1) * lvScale;
     this.cap = Math.max(1, Math.round((L.maxAlive || 4) * (1 + 0.2 * (n - 1))) + this.diff.cap);
     this.mercyT = 14;
     this.setupNet();
@@ -696,7 +701,7 @@ export class World {
       sfx('shield', { pan: this.pan(e.x) });
       return false;
     }
-    let mult = p.mods.dmg * (p.rushT > 0 ? 1.5 : 1);
+    let mult = p.mods.dmg * (p.rushT > 0 ? 1.5 : p.tonicT > 0 ? 1.3 : 1);
     const crit = Math.random() < p.mods.crit;
     const frozen = e.frozen > 0;
     if (frozen) mult *= 1.5;
@@ -887,7 +892,7 @@ export class World {
       id: `${p.id}:${this.localProjId++}`, owner: p.id, kind: s.kind, x: s.x, y: s.y, vx: s.vx, vy: s.vy, g: s.g || 0,
       r: (s.r || 3) * size, life: s.life || 1, dmg: s.dmg || 0, kb: s.kb || 0, pierce: s.pierce || 0, hit: new Set(), local: true,
       explode: s.explode ? { ...s.explode, r: s.explode.r * size } : null, mark: s.mark, perfect: s.perfect, bounce: s.bounce || 0,
-      fuse: s.fuse, zone: s.zone, harmless: s.harmless, rain: s.rain, hue: s.hue || 0, t: 0, multiHitGroup: s.multiHitGroup,
+      fuse: s.fuse, zone: s.zone, harmless: s.harmless, rain: s.rain, hue: s.hue || 0, t: 0, multiHitGroup: s.multiHitGroup, freeze: s.freeze,
     };
     if (s.assist && settings().assistAim) this.assistAim(b);
     this.pproj.push(b);
@@ -917,7 +922,7 @@ export class World {
   }
   onRemoteShot(m) {
     this.pproj.push({ id: 'r' + this.localProjId++, owner: m.o, kind: m.k, x: m.x, y: m.y, vx: m.vx, vy: m.vy, g: m.g, r: m.r, life: m.l, local: false, bounce: m.bo || 0, hue: m.h || 0, t: 0, hit: new Set() });
-    const sounds = { bolt: 'bolt', fireball: 'fireball', arrow: 'arrow', arrowBig: 'arrowBig', shuriken: 'shuriken', potion: 'throw', brew: 'throw', chili: 'throw', pellet: 'shotgun' };
+    const sounds = { wave: 'swingBig', bolt: 'bolt', fireball: 'fireball', arrow: 'arrow', arrowBig: 'arrowBig', shuriken: 'shuriken', potion: 'throw', brew: 'throw', chili: 'throw', pellet: 'shotgun' };
     if (sounds[m.k]) sfx(sounds[m.k], { vol: 0.6, pan: this.pan(m.x), gap: 60 });
   }
 
@@ -959,7 +964,7 @@ export class World {
           if (!b.local) { if (b.kind !== 'arrowBig') { dead = true; if (b.kind === 'fireball' || b.kind === 'potion' || b.kind === 'chili') this.projVisualPop(b); } break; }
           const p = this.playerById(b.owner);
           if (b.explode && !b.pierce) { this.projExplode(b, e); dead = true; break; }
-          if (b.dmg > 0 && p) this.hitEnemy(p, e, b.dmg, { kbx: Math.sign(b.vx) * b.kb, kby: -b.kb * 0.4, mark: b.mark, heavy: b.perfect });
+          if (b.dmg > 0 && p) this.hitEnemy(p, e, b.dmg, { kbx: Math.sign(b.vx) * b.kb, kby: -b.kb * 0.4, mark: b.mark, heavy: b.perfect, freeze: b.freeze });
           if (b.pierce > 0) { b.pierce--; continue; }
           dead = true; break;
         }
@@ -974,9 +979,7 @@ export class World {
   projExplode(b, direct) {
     const p = this.playerById(b.owner);
     if (b.zone && p) {
-      const z = { kind: b.zone.kind, x: b.x, y: Math.min(b.y, this.groundBelow(b.x, b.y - 4) - 8), r: b.zone.r * p.mods.size, life: b.zone.life, max: b.zone.life, owner: b.owner };
-      this.zones.push(z);
-      this.session.emit({ type: 'zone', z });
+      this.addZone(p, { ...b.zone, x: b.x, y: Math.min(b.y, this.groundBelow(b.x, b.y - 4) - 8), r: b.zone.r * p.mods.size });
       sfx('splash', { pan: this.pan(b.x) });
       this.fx.burst(b.x, b.y, 16, { colors: ['#9dffb0', '#ffffff', '#ff9ad5'], speed: [40, 120], g: 100, shape: 'star', add: true });
       return;
@@ -996,6 +999,21 @@ export class World {
       const d = Math.hypot(p.cx - b.x, p.cy - b.y);
       if (d < ex.r * 0.9) { p.vy = -440; p.vx += Math.sign(p.cx - b.x) * 120; p.airJumps = p.airJumpsMax; p.launch = true; p.jumpCut = false; }
     }
+    // Cluster Chili: three mini-bombs scatter out of the blast
+    if (ex.cluster) {
+      for (const dir of [-1, 0, 1]) {
+        this.spawnProj(p, { kind: 'chili', x: b.x, y: b.y - 6, vx: dir * 110 + rand(-20, 20), vy: -200 - rand(40), g: 600, r: 3, life: 0.5 + rand(0.15), dmg: 0, bounce: 1, fuse: true, explode: { r: 24, dmg: 3, burn: 1 } });
+      }
+    }
+    if (ex.napalm) this.addZone(p, { kind: 'fire', x: b.x, y: Math.min(b.y, this.groundBelow(b.x, b.y - 4) - 6), r: 40, life: 4 });
+  }
+  // zones are simulated on every peer (each applies them to its own local players); damage zones only hurt
+  // enemies on their owner's peer, like every other player attack
+  addZone(p, z) {
+    z = { ...z, max: z.life, owner: p.id };
+    this.zones.push(z);
+    this.session.emit({ type: 'zone', z });
+    return z;
   }
 
   // ================================================================= ENEMY PROJECTILES
@@ -1186,13 +1204,36 @@ export class World {
       const z = this.zones[i];
       z.life -= dt;
       if (z.life <= 0) { this.zones.splice(i, 1); continue; }
-      if (Math.random() < 0.5) this.fx.add({ x: z.x + rand(-z.r, z.r) * 0.8, y: z.y + rand(-z.r, z.r) * 0.4, vy: -30, life: 0.6, size: rand(1.5, 3), color: pick(['#9dffb0', '#ffffff', '#ff9ad5']), g: -10, add: true, shape: 'star' });
+      if (z.kind === 'armor') {
+        // Ice Armor: a one-off shield for every local player caught in the nova
+        z.done ??= new Set();
+        for (const p of this.players) {
+          if (!p.local || p.down || z.done.has(p.id)) continue;
+          if (dist2(p.cx, p.cy, z.x, z.y) > z.r * z.r) continue;
+          z.done.add(p.id);
+          p.shield = Math.max(p.shield, 6);
+          this.fx.ring(p.cx, p.cy, 16, '#bfefff');
+        }
+        continue;
+      }
+      if (z.kind === 'fire') {
+        if (Math.random() < 0.7) this.fx.add({ x: z.x + rand(-z.r, z.r) * 0.85, y: z.y + rand(-4, 6), vy: -50, life: 0.45, size: rand(2, 3.5), color: pick(['#ffb347', '#ff6a2a', '#fff36b']), g: -20, add: true });
+        const owner = this.playerById(z.owner);
+        z.tick = (z.tick || 0) - dt;
+        if (owner?.local && z.tick <= 0) {
+          z.tick = 0.5;
+          this.areaHit(owner, z.x, z.y, z.r, 1, { burn: 2, kbx: 0, kby: 0 });
+        }
+        continue;
+      }
+      if (Math.random() < 0.5) this.fx.add({ x: z.x + rand(-z.r, z.r) * 0.8, y: z.y + rand(-z.r, z.r) * 0.4, vy: -30, life: 0.6, size: rand(1.5, 3), color: pick(z.tonic ? ['#ff7ad9', '#ffffff', '#ffe14d'] : ['#9dffb0', '#ffffff', '#ff9ad5']), g: -10, add: true, shape: 'star' });
       if (z.kind === 'heal') {
         for (const p of this.players) {
           if (!p.local || p.down) continue;
           if (dist2(p.cx, p.cy, z.x, z.y) > z.r * z.r) continue;
+          if (z.tonic) p.tonicT = 0.4;
           p.healTick += dt;
-          if (p.healTick >= 1.2) {
+          if (p.healTick >= (z.fast ? 0.8 : 1.2)) {
             p.healTick = 0;
             if (p.hp < p.maxHp) { p.hp++; sfx('heal'); this.fx.text(p.cx, p.y - 8, '+♥', { color: '#9dffb0', size: 9 }); }
           }

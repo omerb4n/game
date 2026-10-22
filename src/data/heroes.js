@@ -9,17 +9,20 @@ export const PLAYER_NAMES = ['P1', 'P2', 'P3', 'P4'];
 // --------------------------------------------------------------- KITS
 const knight = {
   update(p, w, dt) {
-    const c = p.ctl;
+    const c = p.ctl, k = p.mods.k;
     if (p.dashT > 0) {
       p.dashT -= dt;
       p.vx = p.dashDir * 330 * p.mods.speed;
       p.vy = Math.min(p.vy, 20);
       p.invuln = Math.max(p.invuln, 0.05);
       const r = { x: p.x + (p.dashDir > 0 ? p.w - 2 : -14), y: p.y - 4, w: 16, h: p.h + 6 };
-      p.meleeTick(r, 4, { kbx: p.dashDir * 300, kby: -140, stun: 0.8, tag: 'dash', heavy: true });
+      p.meleeTick(r, 4 * (1 + (k.dashDmg || 0)), { kbx: p.dashDir * 300, kby: -140, stun: 0.8, tag: 'dash', heavy: true });
       w.blockEnemyShots(r, p);
       if (Math.random() < 0.6) w.fx.add({ x: p.cx - p.dashDir * 6, y: p.cy + rand(-5, 5), vx: -p.dashDir * 60, vy: 0, life: 0.25, size: 3, color: '#fff3c4', shape: 'smoke' });
-      if (p.dashT <= 0) { p.vx *= 0.4; p.hitboxes.length = 0; }
+      if (p.dashT <= 0) {
+        p.vx *= 0.4; p.hitboxes.length = 0;
+        if (k.aegis) { p.shield = Math.max(p.shield, 5); w.fx.ring(p.cx, p.cy, 18, '#7fc8ff'); }
+      }
       return;
     }
     if (c.attackP && p.cd.attack <= 0) {
@@ -32,18 +35,22 @@ const knight = {
       let r;
       if (dir === 'up') r = { x: p.cx - 13 * s, y: p.y - 18 * s, w: 26 * s, h: 22 * s };
       else if (dir === 'down') r = { x: p.cx - 10 * s, y: p.y + p.h - 4, w: 20 * s, h: 20 * s };
+      else if (big && k.whirl) r = { x: p.cx - 26 * s, y: p.y - 8 * s, w: 52 * s, h: 26 * s };
       else r = { x: p.facing > 0 ? p.x + p.w - 2 : p.x - 22 * s + 2, y: p.y - 6 * s, w: 22 * s, h: 22 * s };
+      const spin = big && k.whirl && dir === 'fwd';
       p.melee(r, dmg, {
-        kbx: dir === 'fwd' ? p.facing * (big ? 260 : 150) : 0, kby: dir === 'up' ? -240 : dir === 'down' ? 120 : -90,
+        kbx: spin ? 0 : dir === 'fwd' ? p.facing * (big ? 260 : 150) : 0, kby: spin ? -220 : dir === 'up' ? -240 : dir === 'down' ? 120 : -90,
         life: 0.1, pogo: dir === 'down', heavy: big, tag: 'sword',
       });
+      if (spin) w.fx.ring(p.cx, p.cy, 24 * s, '#ffd166');
+      if (big && k.wave && dir === 'fwd') w.spawnProj(p, { kind: 'wave', x: p.cx + p.facing * 12, y: p.cy - 2, vx: p.facing * 300, vy: 0, r: 6, life: 0.45, dmg: 3, kb: 120, pierce: 3 });
       p.setSwing(dir, big ? 0.26 : 0.2, big);
       p.cd.attack = (big ? 0.36 : 0.22) / p.mods.atkSpeed;
       if (dir === 'fwd' && p.onGround) p.vx += p.facing * 70;
       sfx(big ? 'swingBig' : 'swing', { pitch: 1 + p.comboIdx * 0.12, pan: w.pan(p.cx) });
     }
     if (c.specialP && p.cd.special <= 0) {
-      p.dashT = 0.3;
+      p.dashT = k.longDash ? 0.45 : 0.3;
       p.dashDir = c.x !== 0 ? Math.sign(c.x) : p.facing;
       p.facing = p.dashDir;
       p.useSpecial();
@@ -58,10 +65,14 @@ const knight = {
 
 const mage = {
   update(p, w, dt) {
-    const c = p.ctl;
+    const c = p.ctl, k = p.mods.k;
     if (c.attackP && p.cd.attack <= 0) {
       const a = p.aimDir(true);
-      w.spawnProj(p, { kind: 'bolt', x: p.cx + a.x * 8, y: p.cy - 2 + a.y * 8, vx: a.x * 330, vy: a.y * 330, r: 3.5, life: 0.65, dmg: 2, kb: 60, assist: true });
+      const base = Math.atan2(a.y, a.x);
+      for (const off of k.twin ? [-0.09, 0.09] : [0]) {
+        const vx = Math.cos(base + off), vy = Math.sin(base + off);
+        w.spawnProj(p, { kind: 'bolt', x: p.cx + vx * 8, y: p.cy - 2 + vy * 8, vx: vx * 330, vy: vy * 330, r: 3.5, life: 0.65, dmg: 2, kb: 60, assist: !k.twin });
+      }
       p.cd.attack = 0.17 / p.mods.atkSpeed;
       p.setSwing('cast', 0.14);
       sfx('bolt', { pitch: rand(0.9, 1.1), pan: w.pan(p.cx) });
@@ -70,7 +81,7 @@ const mage = {
     if (p.charging) {
       if (c.attack) {
         const prev = p.charge;
-        p.charge += dt / 0.8;
+        p.charge += dt / (k.inferno ? 0.48 : 0.8);
         if (p.charge > 0.25 && Math.floor(prev * 8) !== Math.floor(p.charge * 8) && p.charge < 1) sfx('charge', { pitch: p.charge });
         if (prev < 1 && p.charge >= 1) { sfx('chargeFull'); w.fx.sparkle(p.cx, p.cy - 14, 8, '#ff9b5c'); }
         if (p.charge > 0.3 && Math.random() < 0.5) {
@@ -80,7 +91,7 @@ const mage = {
       } else {
         if (p.charge >= 1) {
           const a = p.aimDir(true);
-          w.spawnProj(p, { kind: 'fireball', x: p.cx + a.x * 10, y: p.cy - 2 + a.y * 10, vx: a.x * 250, vy: a.y * 250, r: 6, life: 1.4, dmg: 3, kb: 120, explode: { r: 34, dmg: 6, burn: 3 }, assist: true });
+          w.spawnProj(p, { kind: 'fireball', x: p.cx + a.x * 10, y: p.cy - 2 + a.y * 10, vx: a.x * 250, vy: a.y * 250, r: 6, life: 1.4, dmg: 3, kb: 120, explode: { r: k.inferno ? 48 : 34, dmg: 6, burn: 3 }, assist: true });
           p.setSwing('cast', 0.25);
           p.vx -= a.x * 60;
           sfx('fireball', { pan: w.pan(p.cx) });
@@ -91,8 +102,9 @@ const mage = {
     }
     if (c.specialP && p.cd.special <= 0) {
       p.useSpecial();
-      const R = 70 * p.mods.size;
-      w.areaHit(p, p.cx, p.cy, R, 2, { freeze: 2.6, kby: -60, tag: 'nova' });
+      const R = 70 * p.mods.size * (k.deepFreeze ? 1.3 : 1);
+      w.areaHit(p, p.cx, p.cy, R, 2, { freeze: k.deepFreeze ? 3.9 : 2.6, kby: -60, tag: 'nova' });
+      if (k.iceArmor) w.addZone(p, { kind: 'armor', x: p.cx, y: p.cy, r: R, life: 0.35 });
       w.blockEnemyShots({ x: p.cx - R, y: p.cy - R, w: R * 2, h: R * 2 }, p, true);
       w.fxEvent('nova', p.cx, p.cy, R);
       p.setSwing('cast', 0.3);
@@ -102,7 +114,7 @@ const mage = {
 
 const ranger = {
   update(p, w, dt) {
-    const c = p.ctl;
+    const c = p.ctl, k = p.mods.k;
     if (c.attackP && p.cd.attack <= 0 && !p.charging) {
       p.charging = true; p.charge = 0; p.perfectFired = false;
     }
@@ -115,7 +127,7 @@ const ranger = {
       } else {
         const ch = p.charge;
         const a = p.aimDir(true);
-        const perfect = ch >= 1 && ch <= 1.28;
+        const perfect = ch >= (k.wideWindow ? 0.9 : 1) && ch <= (k.wideWindow ? 1.42 : 1.28);
         const full = ch >= 1;
         const pw = Math.min(1, ch);
         let dmg = 2 + 5 * pw;
@@ -125,6 +137,10 @@ const ranger = {
           kind: full ? 'arrowBig' : 'arrow', x: p.cx + a.x * 8, y: p.cy - 3 + a.y * 8, vx: a.x * sp, vy: a.y * sp, g: full ? 60 : 260,
           r: full ? 4 : 3, life: 1.2, dmg, kb: 80 + 140 * pw, pierce: full ? 3 : 0, mark: 4, perfect, assist: true,
         });
+        if (full && k.twinShot) {
+          const ang = Math.atan2(a.y, a.x) - 0.1 * (a.x < 0 ? -1 : 1);
+          w.spawnProj(p, { kind: 'arrowBig', x: p.cx + a.x * 8, y: p.cy - 3 + a.y * 8, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, g: 60, r: 4, life: 1.2, dmg: dmg * 0.7, kb: 80 + 140 * pw, pierce: 3, mark: 4 });
+        }
         if (perfect) {
           w.fx.text(p.cx, p.y - 14, 'PERFECT!', { color: '#fff36b', size: 9 });
           w.fx.sparkle(p.cx, p.cy, 10, '#fff36b');
@@ -146,10 +162,10 @@ const ranger = {
     }
     if (p.rain) {
       p.rain.t += dt;
-      const total = 14;
-      while (p.rain.n < total && p.rain.t > 0.25 + p.rain.n * 0.06) {
+      const total = k.downpour ? 22 : 14;
+      while (p.rain.n < total && p.rain.t > 0.25 + p.rain.n * (k.downpour ? 0.04 : 0.06)) {
         const x = p.rain.cx + rand(-56, 56) * p.mods.size;
-        w.spawnProj(p, { kind: 'arrow', x, y: -12, vx: p.rain.dir * 30, vy: 440, g: 200, r: 3, life: 1.2, dmg: 3, kb: 40, mark: 4, rain: true });
+        w.spawnProj(p, { kind: 'arrow', x, y: -12, vx: p.rain.dir * 30, vy: 440, g: 200, r: 3, life: 1.2, dmg: 3, kb: 40, mark: 4, rain: true, freeze: k.frostRain ? 1.6 : 0 });
         p.rain.n++;
       }
       if (p.rain.n >= total) p.rain = null;
@@ -159,10 +175,14 @@ const ranger = {
 
 const ninja = {
   update(p, w, dt) {
-    const c = p.ctl;
+    const c = p.ctl, k = p.mods.k;
     if ((c.attackP || (c.attack && p.holdFire > 0.18)) && p.cd.attack <= 0) {
       const a = p.aimDir(true);
-      w.spawnProj(p, { kind: 'shuriken', x: p.cx + a.x * 6, y: p.cy - 3 + a.y * 6, vx: a.x * 400, vy: a.y * 400, r: 3.5, life: 0.55, dmg: 1.6, kb: 50, assist: true });
+      const base = Math.atan2(a.y, a.x);
+      for (const off of k.fan ? [0, -0.2, 0.2] : [0]) {
+        const vx = Math.cos(base + off), vy = Math.sin(base + off);
+        w.spawnProj(p, { kind: 'shuriken', x: p.cx + vx * 6, y: p.cy - 3 + vy * 6, vx: vx * 400, vy: vy * 400, r: 3.5, life: k.pierce ? 0.72 : 0.55, dmg: off ? 1 : 1.6, kb: 50, pierce: k.pierce ? 2 : 0, assist: !off });
+      }
       p.cd.attack = 0.13 / p.mods.atkSpeed;
       p.setSwing('throw', 0.1);
       sfx('shuriken', { pitch: rand(0.9, 1.2), pan: w.pan(p.cx) });
@@ -181,7 +201,12 @@ const ninja = {
       }
       w.wrapEntity(p);
       // damage along the path
-      const kills = w.lineHit(p, sx + p.w / 2, sy + p.h / 2, sx + p.w / 2 + dx * travelled, sy + p.h / 2 + dy * travelled, 14, 5, { kbx: dx * 120, kby: -100, tag: 'step' });
+      const kills = w.lineHit(p, sx + p.w / 2, sy + p.h / 2, sx + p.w / 2 + dx * travelled, sy + p.h / 2 + dy * travelled, 14, k.strike ? 9 : 5, { kbx: dx * 120, kby: -100, tag: 'step', stun: k.strike ? 1 : 0 });
+      if (k.afterimage) {
+        const ax = sx + p.w / 2, ay = sy + p.h / 2, R = 30 * p.mods.size;
+        w.areaHit(p, ax, ay, R, 6, { kby: -140 });
+        w.fxEvent('nova', ax, ay, R, { color: '#c9a6ff' });
+      }
       p.useSpecial();
       if (kills > 0) { p.cd.special = 0.05; w.fx.text(p.cx, p.y - 14, 'RESET!', { color: '#c9a6ff', size: 8 }); }
       p.invuln = Math.max(p.invuln, 0.3);
@@ -195,12 +220,14 @@ const ninja = {
 
 const alchemist = {
   update(p, w, dt) {
-    const c = p.ctl;
+    const c = p.ctl, k = p.mods.k;
     if (c.attackP && p.cd.attack <= 0) {
       const up = c.y < -0.5;
       const vx = up ? p.facing * 90 + p.vx * 0.3 : p.facing * 175 + p.vx * 0.4;
       const vy = up ? -330 : -190;
-      w.spawnProj(p, { kind: 'potion', x: p.cx + p.facing * 6, y: p.cy - 8, vx, vy, g: 650, r: 4, life: 2, dmg: 2, kb: 60, explode: { r: 26, dmg: 3, slow: 2.5 }, hue: Math.floor(rand(3)) });
+      const explode = k.volatile ? { r: 36, dmg: 3, slow: 2.5, burn: 3 } : { r: 26, dmg: 3, slow: 2.5 };
+      w.spawnProj(p, { kind: 'potion', x: p.cx + p.facing * 6, y: p.cy - 8, vx, vy, g: 650, r: 4, life: 2, dmg: 2, kb: 60, explode, hue: Math.floor(rand(3)) });
+      if (k.doubleToss) w.spawnProj(p, { kind: 'potion', x: p.cx + p.facing * 6, y: p.cy - 8, vx: vx * 0.65, vy: vy * 1.12, g: 650, r: 4, life: 2, dmg: 2, kb: 60, explode: { ...explode }, hue: Math.floor(rand(3)) });
       p.cd.attack = 0.4 / p.mods.atkSpeed;
       p.setSwing('throw', 0.18);
       sfx('throw', { pan: w.pan(p.cx) });
@@ -208,7 +235,7 @@ const alchemist = {
     if (c.specialP && p.cd.special <= 0) {
       p.useSpecial();
       const down = c.y > 0.5;
-      w.spawnProj(p, { kind: 'brew', x: p.cx, y: p.cy - 8, vx: down ? 0 : p.facing * 120, vy: down ? 100 : -220, g: 650, r: 5, life: 3, dmg: 0, zone: { kind: 'heal', r: 44, life: 5 } });
+      w.spawnProj(p, { kind: 'brew', x: p.cx, y: p.cy - 8, vx: down ? 0 : p.facing * 120, vy: down ? 100 : -220, g: 650, r: 5, life: 3, dmg: 0, zone: { kind: 'heal', r: 44, life: k.longBrew ? 8 : 5, fast: k.longBrew ? 1 : 0, tonic: k.tonic ? 1 : 0 } });
       p.setSwing('throw', 0.25);
       sfx('throw', { pitch: 0.8, pan: w.pan(p.cx) });
     }
@@ -217,12 +244,13 @@ const alchemist = {
 
 const gunner = {
   update(p, w, dt) {
-    const c = p.ctl;
+    const c = p.ctl, k = p.mods.k;
     if (c.attackP && p.cd.attack <= 0) {
       const a = p.aimDir(true);
       const base = Math.atan2(a.y, a.x);
-      for (let i = 0; i < 6; i++) {
-        const ang = base + rand(-0.26, 0.26);
+      const n = k.shells ? 9 : 6, spread = k.shells ? 0.32 : 0.26;
+      for (let i = 0; i < n; i++) {
+        const ang = base + rand(-spread, spread);
         const sp = rand(380, 460);
         w.spawnProj(p, { kind: 'pellet', x: p.cx + a.x * 10, y: p.cy - 3 + a.y * 10, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, r: 2.5, life: rand(0.17, 0.23), dmg: 1.3, kb: 70, multiHitGroup: true });
       }
@@ -230,7 +258,9 @@ const gunner = {
       if (!p.onGround && a.y > 0.5) { p.vy = Math.min(p.vy, -310); p.launch = true; p.jumpCut = false; }
       else if (!p.onGround && a.y < -0.5) p.vy += 160;
       else p.vx -= a.x * (p.onGround ? 110 : 190);
-      p.cd.attack = 0.48 / p.mods.atkSpeed;
+      // Double Barrel: every other blast follows right after the previous one
+      p.dblShot = k.double ? !p.dblShot : false;
+      p.cd.attack = (p.dblShot ? 0.14 : 0.48) / p.mods.atkSpeed;
       p.setSwing('shoot', 0.16);
       w.fx.flash(p.cx + a.x * 16, p.cy - 3 + a.y * 16, 18, '#ffcf70', 0.08);
       w.fx.burst(p.cx + a.x * 14, p.cy - 3 + a.y * 14, 6, { colors: ['#ffe08a', '#ff8a3d'], speed: [60, 160], angle: base, spread: 0.5, life: [0.1, 0.25], g: 0, add: true });
@@ -239,7 +269,7 @@ const gunner = {
     }
     if (c.specialP && p.cd.special <= 0) {
       p.useSpecial();
-      w.spawnProj(p, { kind: 'chili', x: p.cx + p.facing * 6, y: p.cy - 8, vx: p.facing * 160 + p.vx * 0.4, vy: -230, g: 600, r: 4, life: 0.85, dmg: 0, bounce: 2, fuse: true, explode: { r: 50, dmg: 8, burn: 2, launch: true } });
+      w.spawnProj(p, { kind: 'chili', x: p.cx + p.facing * 6, y: p.cy - 8, vx: p.facing * 160 + p.vx * 0.4, vy: -230, g: 600, r: 4, life: 0.85, dmg: 0, bounce: 2, fuse: true, explode: { r: 50, dmg: 8, burn: 2, launch: true, cluster: k.cluster ? 1 : 0, napalm: k.napalm ? 1 : 0 } });
       p.setSwing('throw', 0.2);
       sfx('throw', { pan: w.pan(p.cx) });
     }
