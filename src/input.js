@@ -245,7 +245,7 @@ class TouchControls {
       const r = this.rects[name];
       if (!r.width) { this.rects = null; continue; }
       const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      const rad = (r.width / 2) * (name === 'pause' ? 1.15 : 1.45);
+      const rad = (r.width / 2) * (name === 'pause' ? 1.15 : 1.62);
       const d = Math.hypot(x - cx, y - cy);
       if (d < rad && d / rad < bd) { bd = d / rad; best = name; }
     }
@@ -349,6 +349,22 @@ class TouchControls {
       this.cdCircle.style.strokeDashoffset = `${off}`;
     }
     if (ready !== this.cdReady) { this.cdReady = ready; this.buttons.special.el.classList.toggle('ready', ready); }
+  }
+  // boxes: screen rects {l, t, r, b} of what's on screen; a button with something under it fades
+  setBehind(boxes) {
+    if (!this.rects) { this.rects = {}; for (const n in this.buttons) this.rects[n] = this.buttons[n].el.getBoundingClientRect(); }
+    for (const name of ['jump', 'attack', 'special']) {
+      const r = this.rects[name], B = this.buttons[name];
+      if (!r?.width) continue;
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2, rad = r.width / 2;
+      let hit = false;
+      for (const k of boxes) {
+        // distance from the button centre to the nearest point of the box
+        const dx = Math.max(k.l - cx, 0, cx - k.r), dy = Math.max(k.t - cy, 0, cy - k.b);
+        if (dx * dx + dy * dy < rad * rad) { hit = true; break; }
+      }
+      if (hit !== B.behind) { B.behind = hit; B.el.classList.toggle('behind', hit); }
+    }
   }
   setCharge(v) {
     if (!this.chargeEl) return;

@@ -204,6 +204,19 @@ class App {
     const frac = p.specialMax ? 1 - p.cd.special / p.specialMax : 1;
     touch.setCooldown(clamp(frac, 0, 1), frac >= 1);
     touch.setCharge(p.charging ? Math.min(1, p.charge) : 0);
+    touch.setBehind(this.screenBoxes(this.world));
+  }
+  // on-screen rects (CSS px) of heroes, enemies, enemy shots and pickups, so touch buttons can fade over them
+  screenBoxes(w) {
+    const v = this.renderer.camView, dpr = this.renderer.view.dpr;
+    if (!v) return [];
+    const k = v.s / dpr, ox = v.ox / dpr, oy = v.oy / dpr, out = [];
+    const add = (e) => { if (e && e.w) out.push({ l: e.x * k + ox, t: e.y * k + oy, r: (e.x + e.w) * k + ox, b: (e.y + e.h) * k + oy }); };
+    for (const p of w.players) if (p.present) add(p);
+    for (const e of w.enemies) add(e);
+    for (const b of w.eproj) add({ x: b.x - b.r - 4, y: b.y - b.r - 4, w: 2 * b.r + 8, h: 2 * b.r + 8 }); // shots are centre + radius
+    for (const e of w.pickups) add(e);
+    return out;
   }
 
   // =============================================================== NAV

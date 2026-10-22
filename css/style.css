@@ -325,11 +325,15 @@ input[type=range]::-moz-range-thumb { width: 1.1rem; height: 1.1rem; border-radi
 .t-knob { position: absolute; left: 50%; top: 50%; width: 46%; height: 46%; border-radius: 50%; background: rgba(255, 255, 255, calc(var(--topa) + 0.2)); border: 3px solid var(--ol); transform: translate(-50%, -50%); }
 .t-hint { position: absolute; left: calc(7% + var(--safe-l)); bottom: calc(var(--B) * 0.9 + var(--safe-b)); font-size: 0.95rem; opacity: calc(var(--topa) + 0.1); pointer-events: none; transition: opacity 0.5s; text-shadow: 0 2px 0 var(--ol); }
 .t-hint.gone { opacity: 0; }
-.t-btn { position: absolute; border-radius: 50%; border: 3px solid rgba(43, 22, 48, 0.9); display: flex; align-items: center; justify-content: center; color: #fff; font-size: calc(var(--B) * 0.36); opacity: var(--topa); transition: transform 0.06s, opacity 0.1s; text-shadow: 0 2px 0 var(--ol); pointer-events: none; box-shadow: 0 4px 0 rgba(43, 22, 48, 0.6); }
-.t-btn.down { transform: scale(0.9); opacity: calc(var(--topa) + 0.3); box-shadow: none; }
-.t-jump { width: calc(var(--B) * 1.05); height: calc(var(--B) * 1.05); right: calc(var(--B) * 0.28 + var(--safe-r)); bottom: calc(var(--B) * 0.42 + var(--safe-b)); background: radial-gradient(circle at 35% 30%, #9fffb8, #2fbf5a); }
-.t-attack { width: calc(var(--B) * 0.98); height: calc(var(--B) * 0.98); right: calc(var(--B) * 1.5 + var(--safe-r)); bottom: calc(var(--B) * 0.14 + var(--safe-b)); background: radial-gradient(circle at 35% 30%, #ffb0d4, #ff3d8a); }
-.t-special { width: calc(var(--B) * 0.78); height: calc(var(--B) * 0.78); right: calc(var(--B) * 1.6 + var(--safe-r)); bottom: calc(var(--B) * 1.32 + var(--safe-b)); background: radial-gradient(circle at 35% 30%, #fff3a0, #ffb800); font-size: calc(var(--B) * 0.3); }
+/* Action buttons are see-through rings (coloured rim + icon over a faint tint) so the game stays
+   readable underneath; they only fill with colour while pressed, and fade further (.behind) while
+   a hero, enemy or shot is under them. Visuals are a bit smaller than the hit areas (see btnAt). */
+.t-btn { --c: #fff; --fill: #fff; position: absolute; border-radius: 50%; border: calc(var(--B) * 0.065) solid var(--c); display: flex; align-items: center; justify-content: center; color: var(--c); font-size: calc(var(--B) * 0.34); opacity: min(1, calc(0.3 + var(--topa) * 0.8)); background: rgba(25, 10, 35, calc(var(--topa) * 0.3)); transition: transform 0.06s, opacity 0.15s, background-color 0.06s; text-shadow: 0 0 3px var(--ol), 0 2px 0 var(--ol); pointer-events: none; box-shadow: 0 0 0 2px rgba(43, 22, 48, 0.55), inset 0 0 0 2px rgba(43, 22, 48, 0.45); }
+.t-btn.down { transform: scale(0.92); opacity: 1; background: var(--fill); color: #fff; }
+.t-btn.behind:not(.down) { opacity: 0.2; }
+.t-jump { --c: #6dff96; --fill: radial-gradient(circle at 35% 30%, #9fffb8, #2fbf5a); width: calc(var(--B) * 0.94); height: calc(var(--B) * 0.94); right: calc(var(--B) * 0.335 + var(--safe-r)); bottom: calc(var(--B) * 0.475 + var(--safe-b)); }
+.t-attack { --c: #ff7ab4; --fill: radial-gradient(circle at 35% 30%, #ffb0d4, #ff3d8a); width: calc(var(--B) * 0.88); height: calc(var(--B) * 0.88); right: calc(var(--B) * 1.55 + var(--safe-r)); bottom: calc(var(--B) * 0.19 + var(--safe-b)); }
+.t-special { --c: #ffd84d; --fill: radial-gradient(circle at 35% 30%, #fff3a0, #ffb800); width: calc(var(--B) * 0.7); height: calc(var(--B) * 0.7); right: calc(var(--B) * 1.64 + var(--safe-r)); bottom: calc(var(--B) * 1.36 + var(--safe-b)); font-size: calc(var(--B) * 0.28); }
 .t-special svg { position: absolute; inset: -7px; width: calc(100% + 14px); height: calc(100% + 14px); transform: rotate(-90deg); }
 .t-special .cd { fill: none; stroke: #fff; stroke-width: 7; stroke-linecap: round; }
 /* glow on a separate layer that only animates opacity, so it stays on the compositor (no per-frame repaint) */
@@ -338,9 +342,9 @@ input[type=range]::-moz-range-thumb { width: 1.1rem; height: 1.1rem; border-radi
 @keyframes readyPulse { 50% { opacity: 1; } }
 .t-charge { position: absolute; inset: 10%; border-radius: 50%; background: rgba(255, 255, 255, 0.55); transform: scale(0); opacity: 0; pointer-events: none; }
 .t-pause { position: absolute; top: calc(0.4rem + var(--safe-t)); right: calc(4.2rem + var(--safe-r)); width: 44px; height: 44px; border-radius: 50%; background: rgba(255, 255, 255, 0.8); color: var(--ol); border: 3px solid var(--ol); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; opacity: 0.75; pointer-events: none; }
-#touch.lefty .t-jump { right: auto; left: calc(var(--B) * 0.28 + var(--safe-l)); }
-#touch.lefty .t-attack { right: auto; left: calc(var(--B) * 1.5 + var(--safe-l)); }
-#touch.lefty .t-special { right: auto; left: calc(var(--B) * 1.6 + var(--safe-l)); }
+#touch.lefty .t-jump { right: auto; left: calc(var(--B) * 0.335 + var(--safe-l)); }
+#touch.lefty .t-attack { right: auto; left: calc(var(--B) * 1.55 + var(--safe-l)); }
+#touch.lefty .t-special { right: auto; left: calc(var(--B) * 1.64 + var(--safe-l)); }
 #touch.lefty .t-hint { left: auto; right: calc(7% + var(--safe-r)); }
 
 /* ---------------------------------------------------------------- ROTATE */
